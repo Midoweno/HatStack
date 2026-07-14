@@ -1,0 +1,100 @@
+HatStack — session notes, 2026-07-14
+(requested as "7/14/26.txt" — saved with dashes, Windows doesn't allow slashes in filenames)
+
+WHAT THIS PROJECT IS
+---------------------
+Personal task/productivity dashboard. Core philosophy: organized by life "hats"
+(categories), not task type. Three columns: Routine, Work, Personal. Each hat has
+Active Projects (name + due date only) and a Task List (actionable items, own
+urgency + own due date, independent of project due date). Hierarchy: Hat -> Project
+-> Task -> Subtask. Priority via 4 urgency levels: critical/high/medium/low.
+
+HOW WE GOT HERE
+-----------------
+- Repo: github.com/Midoweno/HatStack, cloned locally to
+  C:\Users\guore\OneDrive\Documents\HatStack (this folder is inside OneDrive).
+- First built the UI in Figma Make (exported to "Task Management Dashboard/" folder)
+  AND in Lovable (a separate AI app builder). User preferred Lovable's version/format.
+- Pulled the full Lovable source by hand (Lovable's UI only allows one-file-at-a-time
+  download or a paid GitHub sync that creates a NEW repo — user didn't want that, so
+  files were downloaded individually via Claude driving the browser and copied in).
+- Deleted the old Figma "Task Management Dashboard/" folder. The Lovable code now
+  lives in HatStack/dashboard/ and is THE app going forward.
+- Installed Node.js LTS via winget (wasn't present on this machine before).
+- App stack: TanStack Start (React 19) + Vite + Tailwind v4 + shadcn/ui (style: new-york)
+  + zustand (state, persisted to localStorage only — see "sync" below) + dnd-kit for
+  drag-and-drop. Config wrapped by @lovable.dev/vite-tanstack-config (Lovable's own
+  vite plugin bundle — nitro build defaults to Cloudflare as a target but is
+  self-host-flexible per its own README).
+- Runs locally with: cd HatStack/dashboard && npm run dev  →  http://localhost:8080
+
+CHANGES MADE THIS SESSION
+---------------------------
+1. Task due-date display: replaced formatted date (e.g. "Aug 15") with calendar-day
+   countdown — "Today", "{n} days", or "{n} days overdue". Logic in TaskItem.tsx.
+2. Urgency indicator redesign: removed the small colored dot; the task's entire
+   name+meta block is now a rounded "pill" filled with the urgency color (critical/
+   high/medium/low), with contrast-safe text (white on critical, dark on the rest).
+   Added `pillText` field to URGENCY_META in dashboard-types.ts.
+3. Fixed checkbox vertical alignment — row used `items-start` with a manual `mt-0.5`
+   offset tuned for plain text; broke once the pill added padding/height. Switched
+   the row to `items-center` so the checkbox centers against the pill regardless of
+   its height (1-line vs 2-line content).
+4. Removed the hat-column subtitles ("Maintain and function", "Progress and
+   obligations", "Enjoyment and life") — deleted `description` from the HATS
+   constant (dashboard-types.ts) and its prop plumbing through HatColumn.tsx /
+   routes/index.tsx.
+5. Task dialog layout fix: Urgency and Due date were crammed into one 2-column grid
+   and visually overlapping. Now stacked as separate full-width rows.
+6. New recurring-task feature (Google-Calendar-style): "Repeat" dropdown (Does not
+   repeat / Daily / Weekly / Monthly / Yearly) directly under Due date, with an
+   optional "Ends" date that only appears once a frequency is chosen. Data model:
+   `Task.recurrence?: { freq: RecurrenceFreq; until?: string }` in dashboard-types.ts.
+   Behavior (user confirmed): completing a recurring task auto-creates the next
+   occurrence with the due date rolled forward by the chosen frequency, and stops
+   generating once past the optional "until" date. Logic lives in `toggleTask` /
+   `nextOccurrence()` in dashboard-store.ts.
+- Type-checked clean after each change (`npx tsc --noEmit`).
+- NOTHING IS COMMITTED TO GIT YET. `git status` shows CLAUDE.md and dashboard/ as
+  still untracked. User hasn't asked for a commit/push — don't do it unprompted.
+
+IMPORTANT GOTCHA FROM THIS SESSION
+-------------------------------------
+Claude drove the user's REAL Chrome (via the "Claude in Chrome" extension, not a
+sandboxed preview) to test localhost:8080. At one point the user was ALSO clicking/
+typing in that same tab at the same time as Claude — inputs interleaved and
+corrupted task data (a task got renamed to "REC", a stray "Laundry" task appeared,
+another task got auto-completed). Lesson: don't drive the same live browser tab the
+user might also be using; ask first / stay hands-off once the user is testing
+themselves.
+
+OPEN THREAD — CROSS-DEVICE SYNC (where we paused)
+----------------------------------------------------
+Problem: data only lives in browser localStorage — no sync between devices at all.
+User wants access from phone / anywhere, and wants it fully free (no paid tiers).
+
+Decided approach:
+  - Supabase (free tier — 500MB DB, 5GB bandwidth/mo) as the real backend/database,
+    replacing localStorage as the source of truth.
+  - Vercel (free Hobby tier) to host/deploy the app so it's reachable from a real
+    URL (e.g. hatstack.vercel.app), not just localhost — required for phone access.
+  - Both plans are genuinely free at this usage scale (single personal user, tiny
+    data volume); no credit card auto-charges on free tiers.
+  - Claude CANNOT create accounts on the user's behalf (hard rule). User needs to:
+      1. Sign up at supabase.com (can use "sign up with GitHub"), create a project,
+         grab the project URL + anon API key.
+      2. Sign up at vercel.com (same, GitHub sign-in works) and connect it to the
+         Midoweno/HatStack GitHub repo.
+      3. Hand the Supabase URL + anon key back to Claude.
+  - Once Claude has those: wire the zustand store to Supabase (replacing
+    localStorage), add basic auth (just to keep it private to the user, not
+    public/writable by strangers who find the URL), and set up Vercel deploy config.
+
+NEXT SESSION: pick up here — check whether user has created the Supabase/Vercel
+accounts and has the API key ready. If not, that's the next step before any code
+changes for sync.
+
+STANDING RULES FROM HatStack/CLAUDE.md
+------------------------------------------
+- Keep answers concise; clearly state what changed when changes are made.
+- If something isn't specified, don't build it — ask what's missing, be specific.
