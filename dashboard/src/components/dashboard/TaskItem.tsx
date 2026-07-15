@@ -1,6 +1,7 @@
 import { useDraggable } from "@dnd-kit/core";
 import { differenceInCalendarDays, isPast, isToday, parseISO } from "date-fns";
 import { MoreHorizontal, Pencil, Trash2, GripVertical } from "lucide-react";
+import { toast } from "sonner";
 import type { Project, Task } from "@/lib/dashboard-types";
 import { URGENCY_META } from "@/lib/dashboard-types";
 import { useDashboard } from "@/lib/dashboard-store";
@@ -24,6 +25,24 @@ export function TaskItem({ task, project, onEdit }: Props) {
   const toggleTask = useDashboard((s) => s.toggleTask);
   const deleteTask = useDashboard((s) => s.deleteTask);
   const u = URGENCY_META[task.urgency];
+
+  const handleToggle = () => {
+    const wasCompleted = task.completed;
+    const createdId = toggleTask(task.id);
+
+    if (!wasCompleted) {
+      toast(`"${task.name}" completed`, {
+        action: {
+          label: "Undo",
+          onClick: () => {
+            toggleTask(task.id);
+            if (createdId) deleteTask(createdId);
+          },
+        },
+        duration: 4000,
+      });
+    }
+  };
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `task-${task.id}`,
@@ -66,7 +85,7 @@ export function TaskItem({ task, project, onEdit }: Props) {
 
       <Checkbox
         checked={task.completed}
-        onCheckedChange={() => toggleTask(task.id)}
+        onCheckedChange={handleToggle}
         className="shrink-0"
       />
 

@@ -49,7 +49,6 @@ function Dashboard() {
   };
 
   const today = useMemo(() => format(new Date(), "EEEE, MMMM d"), []);
-  const openTaskCount = tasks.filter((t) => !t.completed).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -62,11 +61,6 @@ function Dashboard() {
             <h1 className="mt-1 font-display text-4xl text-ink sm:text-5xl">
               What are you wearing today?
             </h1>
-            <p className="mt-2 max-w-2xl text-sm text-ink-soft">
-              Three hats. {openTaskCount} open{" "}
-              {openTaskCount === 1 ? "task" : "tasks"}. Execute in urgency order —
-              projects give context, tasks give action.
-            </p>
           </div>
           <div className="flex shrink-0 gap-2">
             <Button

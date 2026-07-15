@@ -31,7 +31,7 @@ export function HatColumn({
   const { setNodeRef, isOver } = useDroppable({ id: `hat-${hat}`, data: { hat } });
 
   const activeProjects = projects
-    .filter((p) => p.hat === hat && !p.archived)
+    .filter((p) => p.hat === hat && !p.completed)
     .sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"));
 
   const activeTasks = tasks
@@ -49,7 +49,7 @@ export function HatColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex min-h-[70vh] flex-col rounded-2xl border border-hairline bg-surface transition-colors",
+        "flex min-h-[70vh] flex-col rounded-2xl border border-hairline-strong bg-surface transition-colors",
         isOver && "border-ink/30 bg-accent/40",
       )}
     >

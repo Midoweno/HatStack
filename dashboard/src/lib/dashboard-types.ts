@@ -55,7 +55,8 @@ export interface Project {
   name: string;
   icon?: string;
   dueDate?: string; // ISO date
-  archived: boolean;
+  completed: boolean;
+  completedAt?: number;
   createdAt: number;
 }
 

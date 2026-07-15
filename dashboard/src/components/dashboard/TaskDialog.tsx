@@ -64,7 +64,7 @@ export function TaskDialog({
   }, [open, task, defaultHat, defaultProjectId]);
 
   const availableProjects = useMemo(
-    () => projects.filter((p) => !p.archived && p.hat === hat),
+    () => projects.filter((p) => !p.completed && p.hat === hat),
     [projects, hat],
   );
 

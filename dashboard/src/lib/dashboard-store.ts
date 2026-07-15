@@ -56,8 +56,8 @@ interface Store extends DashboardState {
     dueDate?: string;
   }) => Project;
   updateProject: (id: string, patch: Partial<Omit<Project, "id">>) => void;
-  archiveProject: (id: string) => void;
-  unarchiveProject: (id: string) => void;
+  completeProject: (id: string) => void;
+  uncompleteProject: (id: string) => void;
   deleteProject: (id: string) => void;
 
   addTask: (input: {
@@ -70,7 +70,9 @@ interface Store extends DashboardState {
     recurrence?: Recurrence;
   }) => Task;
   updateTask: (id: string, patch: Partial<Omit<Task, "id">>) => void;
-  toggleTask: (id: string) => void;
+  // Returns the id of the next recurring occurrence created, if any, so
+  // callers (e.g. an undo action) can remove it when reverting completion.
+  toggleTask: (id: string) => string | undefined;
   moveTaskToHat: (id: string, hat: Hat) => void;
   deleteTask: (id: string) => void;
 }
@@ -83,7 +85,7 @@ const seed: DashboardState = {
       name: "Columbia Preparation",
       icon: "📄",
       dueDate: "2026-08-15",
-      archived: false,
+      completed: false,
       createdAt: Date.now(),
     },
     {
@@ -92,7 +94,7 @@ const seed: DashboardState = {
       name: "AI Portfolio",
       icon: "💻",
       dueDate: "2026-09-01",
-      archived: false,
+      completed: false,
       createdAt: Date.now(),
     },
     {
@@ -101,7 +103,7 @@ const seed: DashboardState = {
       name: "Badminton Gear",
       icon: "🏸",
       dueDate: "2026-07-25",
-      archived: false,
+      completed: false,
       createdAt: Date.now(),
     },
   ],
@@ -174,7 +176,7 @@ export const useDashboard = create<Store>()(
           name: input.name,
           icon: input.icon,
           dueDate: input.dueDate,
-          archived: false,
+          completed: false,
           createdAt: Date.now(),
         };
         set((s) => ({ projects: [...s.projects, project] }));
@@ -184,14 +186,16 @@ export const useDashboard = create<Store>()(
         set((s) => ({
           projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)),
         })),
-      archiveProject: (id) =>
-        set((s) => ({
-          projects: s.projects.map((p) => (p.id === id ? { ...p, archived: true } : p)),
-        })),
-      unarchiveProject: (id) =>
+      completeProject: (id) =>
         set((s) => ({
           projects: s.projects.map((p) =>
-            p.id === id ? { ...p, archived: false } : p,
+            p.id === id ? { ...p, completed: true, completedAt: Date.now() } : p,
+          ),
+        })),
+      uncompleteProject: (id) =>
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === id ? { ...p, completed: false, completedAt: undefined } : p,
           ),
         })),
       deleteProject: (id) =>
@@ -222,7 +226,8 @@ export const useDashboard = create<Store>()(
         set((s) => ({
           tasks: s.tasks.map((t) => (t.id === id ? { ...t, ...patch } : t)),
         })),
-      toggleTask: (id) =>
+      toggleTask: (id) => {
+        let createdId: string | undefined;
         set((s) => {
           const target = s.tasks.find((t) => t.id === id);
           if (!target) return s;
@@ -240,11 +245,16 @@ export const useDashboard = create<Store>()(
 
           if (completing && target.recurrence) {
             const next = nextOccurrence(target);
-            if (next) tasks.push(next);
+            if (next) {
+              tasks.push(next);
+              createdId = next.id;
+            }
           }
 
           return { tasks };
-        }),
+        });
+        return createdId;
+      },
       moveTaskToHat: (id, hat) =>
         set((s) => ({
           tasks: s.tasks.map((t) =>

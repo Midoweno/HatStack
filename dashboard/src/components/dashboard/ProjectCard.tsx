@@ -1,5 +1,5 @@
 import { format, isPast, parseISO } from "date-fns";
-import { MoreHorizontal, Archive, Trash2, Pencil } from "lucide-react";
+import { MoreHorizontal, Trash2, Pencil, CheckCircle2 } from "lucide-react";
 import type { Project, Task } from "@/lib/dashboard-types";
 import { useDashboard } from "@/lib/dashboard-store";
 import { Progress } from "@/components/ui/progress";
@@ -19,7 +19,7 @@ interface Props {
 }
 
 export function ProjectCard({ project, tasks, onEdit }: Props) {
-  const archiveProject = useDashboard((s) => s.archiveProject);
+  const completeProject = useDashboard((s) => s.completeProject);
   const deleteProject = useDashboard((s) => s.deleteProject);
 
   const projectTasks = tasks.filter((t) => t.projectId === project.id);
@@ -66,8 +66,8 @@ export function ProjectCard({ project, tasks, onEdit }: Props) {
             <DropdownMenuItem onClick={() => onEdit(project)}>
               <Pencil className="mr-2 h-4 w-4" /> Edit
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => archiveProject(project.id)}>
-              <Archive className="mr-2 h-4 w-4" /> Archive
+            <DropdownMenuItem onClick={() => completeProject(project.id)}>
+              <CheckCircle2 className="mr-2 h-4 w-4" /> Complete
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"

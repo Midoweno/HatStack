@@ -35,6 +35,7 @@
   --color-surface: var(--surface);
   --color-surface-elevated: var(--surface-elevated);
   --color-hairline: var(--hairline);
+  --color-hairline-strong: var(--hairline-strong);
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);
   --color-ink-faint: var(--ink-faint);
@@ -55,6 +56,7 @@
   --surface: oklch(0.985 0.005 90);
   --surface-elevated: oklch(1 0 0);
   --hairline: oklch(0.9 0.008 80);
+  --hairline-strong: oklch(0.8 0.008 80);
   --ink: oklch(0.22 0.02 55);
   --ink-soft: oklch(0.42 0.015 60);
   --ink-faint: oklch(0.62 0.012 70);
@@ -104,6 +106,7 @@
   --surface: oklch(0.2 0.012 60);
   --surface-elevated: oklch(0.24 0.014 60);
   --hairline: oklch(0.32 0.012 60);
+  --hairline-strong: oklch(0.42 0.012 60);
   --ink: oklch(0.95 0.005 80);
   --ink-soft: oklch(0.78 0.01 70);
   --ink-faint: oklch(0.6 0.01 70);
