@@ -59,7 +59,7 @@ function Dashboard() {
               {today}
             </p>
             <h1 className="mt-1 font-display text-4xl text-ink sm:text-5xl">
-              What are you wearing today?
+              What are we wearing today?
             </h1>
           </div>
           <div className="flex shrink-0 gap-2">
