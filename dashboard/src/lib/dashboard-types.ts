@@ -64,6 +64,7 @@ export type RecurrenceFreq = "daily" | "weekly" | "monthly" | "yearly";
 
 export interface Recurrence {
   freq: RecurrenceFreq;
+  interval: number; // repeat every N units of freq (e.g. freq: "daily", interval: 3 => every 3 days)
   until?: string; // ISO date; recurrence has no end date if omitted
 }
 

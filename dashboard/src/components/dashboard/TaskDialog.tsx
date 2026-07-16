@@ -49,6 +49,7 @@ export function TaskDialog({
   const [dueDate, setDueDate] = useState("");
   const [projectId, setProjectId] = useState<string>(NONE);
   const [repeat, setRepeat] = useState<RecurrenceFreq | "none">("none");
+  const [recurrenceInterval, setRecurrenceInterval] = useState(1);
   const [recurrenceEnd, setRecurrenceEnd] = useState("");
 
   useEffect(() => {
@@ -59,6 +60,7 @@ export function TaskDialog({
       setDueDate(task?.dueDate ?? "");
       setProjectId(task?.projectId ?? defaultProjectId ?? NONE);
       setRepeat(task?.recurrence?.freq ?? "none");
+      setRecurrenceInterval(task?.recurrence?.interval ?? 1);
       setRecurrenceEnd(task?.recurrence?.until ?? "");
     }
   }, [open, task, defaultHat, defaultProjectId]);
@@ -85,7 +87,11 @@ export function TaskDialog({
       recurrence:
         repeat === "none"
           ? undefined
-          : { freq: repeat, until: recurrenceEnd || undefined },
+          : {
+              freq: repeat,
+              interval: Math.max(1, recurrenceInterval || 1),
+              until: recurrenceEnd || undefined,
+            },
     };
     if (task) {
       updateTask(task.id, payload);
@@ -180,26 +186,36 @@ export function TaskDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Repeat</Label>
-              <Select
-                value={repeat}
-                onValueChange={(v) => setRepeat(v as RecurrenceFreq | "none")}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Does not repeat</SelectItem>
-                  <SelectItem value="daily">Daily</SelectItem>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                  <SelectItem value="yearly">Yearly</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {repeat !== "none" && (
+          <div className="space-y-1.5">
+            <Label>Repeat</Label>
+            <Select
+              value={repeat}
+              onValueChange={(v) => setRepeat(v as RecurrenceFreq | "none")}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Does not repeat</SelectItem>
+                <SelectItem value="daily">Day(s)</SelectItem>
+                <SelectItem value="weekly">Week(s)</SelectItem>
+                <SelectItem value="monthly">Month(s)</SelectItem>
+                <SelectItem value="yearly">Year(s)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {repeat !== "none" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Every</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={recurrenceInterval}
+                  onChange={(e) => setRecurrenceInterval(Number(e.target.value))}
+                />
+              </div>
               <div className="space-y-1.5">
                 <Label>Ends (optional)</Label>
                 <Input
@@ -208,8 +224,8 @@ export function TaskDialog({
                   onChange={(e) => setRecurrenceEnd(e.target.value)}
                 />
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>

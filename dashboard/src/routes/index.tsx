@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -7,10 +7,13 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Archive, Plus } from "lucide-react";
+import { Archive, LogOut, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { HATS, type Hat, type Project, type Task } from "@/lib/dashboard-types";
 import { useDashboard } from "@/lib/dashboard-store";
+import { useAuth } from "@/lib/use-auth";
+import { supabase } from "@/lib/supabase";
+import { LoginScreen } from "@/components/auth/LoginScreen";
 import { Button } from "@/components/ui/button";
 import { HatColumn } from "@/components/dashboard/HatColumn";
 import { ProjectDialog } from "@/components/dashboard/ProjectDialog";
@@ -18,8 +21,29 @@ import { TaskDialog } from "@/components/dashboard/TaskDialog";
 import { ArchiveSheet } from "@/components/dashboard/ArchiveSheet";
 
 export const Route = createFileRoute("/")({
-  component: Dashboard,
+  component: IndexRoute,
 });
+
+function IndexRoute() {
+  const { session, loading } = useAuth();
+  const loadingData = useDashboard((s) => s.loading);
+  const init = useDashboard((s) => s.init);
+  const reset = useDashboard((s) => s.reset);
+
+  useEffect(() => {
+    if (session?.user.id) {
+      init(session.user.id);
+    } else {
+      reset();
+    }
+  }, [session?.user.id, init, reset]);
+
+  if (loading) return null;
+  if (!session) return <LoginScreen />;
+  if (loadingData) return null;
+
+  return <Dashboard />;
+}
 
 function Dashboard() {
   const projects = useDashboard((s) => s.projects);
@@ -78,6 +102,15 @@ function Dashboard() {
             >
               <Plus className="mr-1 h-4 w-4" />
               New task
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => supabase.auth.signOut()}
+              className="text-ink-soft"
+            >
+              <LogOut className="mr-1.5 h-4 w-4" />
+              Sign out
             </Button>
           </div>
         </div>
