@@ -19,6 +19,7 @@ import { HatColumn } from "@/components/dashboard/HatColumn";
 import { ProjectDialog } from "@/components/dashboard/ProjectDialog";
 import { TaskDialog } from "@/components/dashboard/TaskDialog";
 import { ArchiveSheet } from "@/components/dashboard/ArchiveSheet";
+import { ProjectTasksDialog } from "@/components/dashboard/ProjectTasksDialog";
 
 export const Route = createFileRoute("/")({
   component: IndexRoute,
@@ -59,8 +60,10 @@ function Dashboard() {
     open: boolean;
     hat?: Hat;
     task?: Task | null;
+    defaultProjectId?: string;
   }>({ open: false });
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [openProject, setOpenProject] = useState<Project | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -77,7 +80,7 @@ function Dashboard() {
   return (
     <div className="min-h-screen bg-background">
       <header className="mx-auto max-w-[1600px] px-6 pt-10 pb-6 sm:px-10">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4">
+        <div className="flex flex-col gap-4 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-[0.18em] text-ink-faint">
               {today}
@@ -86,7 +89,7 @@ function Dashboard() {
               What are we wearing today?
             </h1>
           </div>
-          <div className="flex shrink-0 gap-2">
+          <div className="flex flex-wrap shrink-0 gap-2">
             <Button
               variant="ghost"
               size="sm"
@@ -138,6 +141,7 @@ function Dashboard() {
                 onEditTask={(t) =>
                   setTaskDialog({ open: true, hat: t.hat, task: t })
                 }
+                onOpenProject={(p) => setOpenProject(p)}
               />
             ))}
           </div>
@@ -174,9 +178,23 @@ function Dashboard() {
           setTaskDialog((s) => ({ ...s, open: v, task: v ? s.task : null }))
         }
         defaultHat={taskDialog.hat}
+        defaultProjectId={taskDialog.defaultProjectId}
         task={taskDialog.task}
       />
       <ArchiveSheet open={archiveOpen} onOpenChange={setArchiveOpen} />
+      <ProjectTasksDialog
+        project={openProject}
+        onOpenChange={(v) => !v && setOpenProject(null)}
+        tasks={tasks}
+        onEditTask={(t) => {
+          setOpenProject(null);
+          setTaskDialog({ open: true, hat: t.hat, task: t });
+        }}
+        onAddTask={(p) => {
+          setOpenProject(null);
+          setTaskDialog({ open: true, hat: p.hat, task: null, defaultProjectId: p.id });
+        }}
+      />
     </div>
   );
 }

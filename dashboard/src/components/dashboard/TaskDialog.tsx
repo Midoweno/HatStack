@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { format } from "date-fns";
 import { useDashboard } from "@/lib/dashboard-store";
 import type { Hat, RecurrenceFreq, Task, Urgency } from "@/lib/dashboard-types";
 import { HATS, URGENCY_META } from "@/lib/dashboard-types";
@@ -179,11 +180,21 @@ export function TaskDialog({
 
           <div className="space-y-1.5">
             <Label>Due date</Label>
-            <Input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-            />
+            <div className="flex gap-2">
+              <Input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0"
+                onClick={() => setDueDate(format(new Date(), "yyyy-MM-dd"))}
+              >
+                Due Today
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-1.5">

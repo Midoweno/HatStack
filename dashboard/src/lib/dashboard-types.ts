@@ -77,6 +77,10 @@ export interface Task {
   urgency: Urgency;
   dueDate?: string;
   recurrence?: Recurrence;
+  // Set on the auto-created next occurrence of a recurring task, pointing
+  // back to the task instance that was completed to spawn it. Lets undo /
+  // un-completing that instance remove the spawned occurrence again.
+  recurrenceParentId?: string;
   completed: boolean;
   completedAt?: number;
   createdAt: number;

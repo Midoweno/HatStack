@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { format } from "date-fns";
 import { useDashboard } from "@/lib/dashboard-store";
 import type { Hat, Project } from "@/lib/dashboard-types";
 import { HATS } from "@/lib/dashboard-types";
@@ -92,29 +93,37 @@ export function ProjectDialog({ open, onOpenChange, defaultHat, project }: Props
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Hat</Label>
-              <Select value={hat} onValueChange={(v) => setHat(v as Hat)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {HATS.map((h) => (
-                    <SelectItem key={h.id} value={h.id}>
-                      {h.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Due date</Label>
+          <div className="space-y-1.5">
+            <Label>Hat</Label>
+            <Select value={hat} onValueChange={(v) => setHat(v as Hat)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {HATS.map((h) => (
+                  <SelectItem key={h.id} value={h.id}>
+                    {h.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Due date</Label>
+            <div className="flex gap-2">
               <Input
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
               />
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0"
+                onClick={() => setDueDate(format(new Date(), "yyyy-MM-dd"))}
+              >
+                Due Today
+              </Button>
             </div>
           </div>
         </div>

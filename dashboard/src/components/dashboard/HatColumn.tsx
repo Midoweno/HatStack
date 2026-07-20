@@ -16,6 +16,7 @@ interface Props {
   onAddTask: () => void;
   onEditProject: (p: Project) => void;
   onEditTask: (t: Task) => void;
+  onOpenProject: (p: Project) => void;
 }
 
 export function HatColumn({
@@ -27,6 +28,7 @@ export function HatColumn({
   onAddTask,
   onEditProject,
   onEditTask,
+  onOpenProject,
 }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: `hat-${hat}`, data: { hat } });
 
@@ -92,6 +94,7 @@ export function HatColumn({
                 project={p}
                 tasks={tasks}
                 onEdit={onEditProject}
+                onOpen={onOpenProject}
               />
             ))}
           </div>

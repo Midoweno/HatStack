@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { format } from "date-fns";
+import { useMemo, useState } from "react";
+import { format, isToday, isYesterday } from "date-fns";
 import { Download, RotateCcw, Trash2 } from "lucide-react";
 import { useDashboard } from "@/lib/dashboard-store";
-import { HATS, URGENCY_META } from "@/lib/dashboard-types";
+import { HATS, URGENCY_META, type Task } from "@/lib/dashboard-types";
 import { downloadCsv } from "@/lib/csv";
 import {
   Sheet,
@@ -35,6 +35,26 @@ export function ArchiveSheet({ open, onOpenChange }: Props) {
   const completedTasks = tasks
     .filter((t) => t.completed)
     .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0));
+
+  const groupedCompletedTasks = useMemo(() => {
+    const byDay = new Map<string, Task[]>();
+    for (const t of completedTasks) {
+      const key = t.completedAt ? format(new Date(t.completedAt), "yyyy-MM-dd") : "unknown";
+      if (!byDay.has(key)) byDay.set(key, []);
+      byDay.get(key)!.push(t);
+    }
+    return Array.from(byDay.entries()).map(([key, dayTasks]) => {
+      const date = key !== "unknown" ? new Date(dayTasks[0].completedAt!) : null;
+      const label = !date
+        ? "No date"
+        : isToday(date)
+          ? "Today"
+          : isYesterday(date)
+            ? "Yesterday"
+            : format(date, "MMMM d, yyyy");
+      return { key, label, tasks: dayTasks };
+    });
+  }, [completedTasks]);
 
   const exportCompletedTasks = () => {
     const rows: string[][] = [
@@ -112,67 +132,68 @@ export function ArchiveSheet({ open, onOpenChange }: Props) {
                   Completed tasks will land here.
                 </p>
               ) : (
-                <div className="space-y-2">
-                  {completedTasks.map((t) => {
-                    const hatLabel = HATS.find((h) => h.id === t.hat)?.label ?? t.hat;
-                    const project = t.projectId
-                      ? projectById.get(t.projectId)
-                      : undefined;
-                    const u = URGENCY_META[t.urgency];
-                    return (
-                      <div
-                        key={t.id}
-                        className="flex items-center justify-between rounded-lg border border-hairline bg-surface-elevated px-3 py-2"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm text-ink line-through">
-                            {t.name}
-                          </p>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-ink-faint">
-                            <span className={cn("font-medium", u.text)}>
-                              {u.label}
-                            </span>
-                            <span>·</span>
-                            <span>{hatLabel}</span>
-                            {project && (
-                              <>
-                                <span>·</span>
-                                <span className="truncate">{project.name}</span>
-                              </>
-                            )}
-                            {t.completedAt && (
-                              <>
-                                <span>·</span>
-                                <span>
-                                  {format(new Date(t.completedAt), "MMM d, yyyy")}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => toggleTask(t.id)}
-                            aria-label="Restore to task list"
-                          >
-                            <RotateCcw className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => deleteTask(t.id)}
-                            aria-label="Delete permanently"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
+                <div className="space-y-5">
+                  {groupedCompletedTasks.map((group) => (
+                    <div key={group.key}>
+                      <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+                        {group.label}
+                      </h4>
+                      <div className="space-y-2">
+                        {group.tasks.map((t) => {
+                          const hatLabel = HATS.find((h) => h.id === t.hat)?.label ?? t.hat;
+                          const project = t.projectId
+                            ? projectById.get(t.projectId)
+                            : undefined;
+                          const u = URGENCY_META[t.urgency];
+                          return (
+                            <div
+                              key={t.id}
+                              className="flex items-center justify-between rounded-lg border border-hairline bg-surface-elevated px-3 py-2"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-sm text-ink line-through">
+                                  {t.name}
+                                </p>
+                                <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-ink-faint">
+                                  <span className={cn("font-medium", u.text)}>
+                                    {u.label}
+                                  </span>
+                                  <span>·</span>
+                                  <span>{hatLabel}</span>
+                                  {project && (
+                                    <>
+                                      <span>·</span>
+                                      <span className="truncate">{project.name}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex shrink-0 gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => toggleTask(t.id)}
+                                  aria-label="Restore to task list"
+                                >
+                                  <RotateCcw className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => deleteTask(t.id)}
+                                  aria-label="Delete permanently"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

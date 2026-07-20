@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { addDays, addMonths, addWeeks, addYears, format, isAfter, parseISO } from "date-fns";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { toast } from "sonner";
 import { supabase } from "./supabase";
 import type {
   DashboardState,
@@ -43,6 +44,7 @@ function nextOccurrence(task: Task): Task | null {
     ...task,
     id: uid(),
     dueDate: format(next, "yyyy-MM-dd"),
+    recurrenceParentId: task.id,
     completed: false,
     completedAt: undefined,
     createdAt: Date.now(),
@@ -75,6 +77,7 @@ type TaskRow = {
   recurrence_freq: RecurrenceFreq | null;
   recurrence_interval: number | null;
   recurrence_until: string | null;
+  recurrence_parent_id: string | null;
   completed: boolean;
   completed_at: string | null;
   created_at: string;
@@ -135,6 +138,7 @@ function taskFromRow(row: TaskRow): Task {
           until: row.recurrence_until ?? undefined,
         }
       : undefined,
+    recurrenceParentId: row.recurrence_parent_id ?? undefined,
     completed: row.completed,
     completedAt: row.completed_at ? new Date(row.completed_at).getTime() : undefined,
     createdAt: new Date(row.created_at).getTime(),
@@ -152,8 +156,9 @@ function taskToRow(userId: string, t: Task): TaskRow {
     urgency: t.urgency,
     due_date: t.dueDate ?? null,
     recurrence_freq: t.recurrence?.freq ?? null,
-    recurrence_interval: t.recurrence?.interval ?? null,
+    recurrence_interval: t.recurrence?.interval ?? 1,
     recurrence_until: t.recurrence?.until ?? null,
+    recurrence_parent_id: t.recurrenceParentId ?? null,
     completed: t.completed,
     completed_at: t.completedAt ? new Date(t.completedAt).toISOString() : null,
     created_at: new Date(t.createdAt).toISOString(),
@@ -170,9 +175,11 @@ function taskPatchToRow(patch: Partial<Omit<Task, "id">>) {
   if ("dueDate" in patch) row.due_date = patch.dueDate ?? null;
   if ("recurrence" in patch) {
     row.recurrence_freq = patch.recurrence?.freq ?? null;
-    row.recurrence_interval = patch.recurrence?.interval ?? null;
+    row.recurrence_interval = patch.recurrence?.interval ?? 1;
     row.recurrence_until = patch.recurrence?.until ?? null;
   }
+  if ("recurrenceParentId" in patch)
+    row.recurrence_parent_id = patch.recurrenceParentId ?? null;
   if ("completed" in patch) row.completed = patch.completed;
   if ("completedAt" in patch)
     row.completed_at = patch.completedAt ? new Date(patch.completedAt).toISOString() : null;
@@ -181,6 +188,7 @@ function taskPatchToRow(patch: Partial<Omit<Task, "id">>) {
 
 function reportError(action: string, error: { message: string }) {
   console.error(`[dashboard-store] ${action} failed:`, error.message);
+  toast.error(`Couldn't save: ${action}`, { description: error.message });
 }
 
 // --- Store --------------------------------------------------------------
@@ -314,12 +322,25 @@ export const useDashboard = create<Store>()((set, get) => ({
   updateProject: (id, patch) => {
     set((s) => ({
       projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+      // Keep a project's tasks in the same hat group as the project itself —
+      // groups must not overlap across Routine/Work/Personal.
+      tasks:
+        "hat" in patch
+          ? s.tasks.map((t) => (t.projectId === id ? { ...t, hat: patch.hat! } : t))
+          : s.tasks,
     }));
     supabase
       .from("projects")
       .update(projectPatchToRow(patch))
       .eq("id", id)
       .then(({ error }) => error && reportError("update project", error));
+    if ("hat" in patch) {
+      supabase
+        .from("tasks")
+        .update(taskPatchToRow({ hat: patch.hat }))
+        .eq("project_id", id)
+        .then(({ error }) => error && reportError("move project tasks", error));
+    }
   },
   completeProject: (id) => get().updateProject(id, { completed: true, completedAt: Date.now() }),
   uncompleteProject: (id) =>
@@ -372,6 +393,7 @@ export const useDashboard = create<Store>()((set, get) => ({
   toggleTask: (id) => {
     let createdId: string | undefined;
     let created: Task | undefined;
+    let removedId: string | undefined;
     let toggled: Task | undefined;
 
     set((s) => {
@@ -379,7 +401,7 @@ export const useDashboard = create<Store>()((set, get) => ({
       if (!target) return s;
 
       const completing = !target.completed;
-      const tasks = s.tasks.map((t) => {
+      let tasks = s.tasks.map((t) => {
         if (t.id !== id) return t;
         toggled = { ...t, completed: completing, completedAt: completing ? Date.now() : undefined };
         return toggled;
@@ -391,6 +413,16 @@ export const useDashboard = create<Store>()((set, get) => ({
           tasks.push(next);
           created = next;
           createdId = next.id;
+        }
+      }
+
+      if (!completing) {
+        // Un-completing a recurring task: remove the next occurrence it
+        // spawned, if the user hasn't already completed that one too.
+        const spawned = tasks.find((t) => t.recurrenceParentId === id && !t.completed);
+        if (spawned) {
+          tasks = tasks.filter((t) => t.id !== spawned.id);
+          removedId = spawned.id;
         }
       }
 
@@ -410,6 +442,13 @@ export const useDashboard = create<Store>()((set, get) => ({
         .from("tasks")
         .insert(taskToRow(userId, created))
         .then(({ error }) => error && reportError("add recurring task", error));
+    }
+    if (userId && removedId) {
+      supabase
+        .from("tasks")
+        .delete()
+        .eq("id", removedId)
+        .then(({ error }) => error && reportError("remove recurring occurrence", error));
     }
 
     return createdId;

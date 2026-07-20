@@ -28,16 +28,13 @@ export function TaskItem({ task, project, onEdit }: Props) {
 
   const handleToggle = () => {
     const wasCompleted = task.completed;
-    const createdId = toggleTask(task.id);
+    toggleTask(task.id);
 
     if (!wasCompleted) {
       toast(`"${task.name}" completed`, {
         action: {
           label: "Undo",
-          onClick: () => {
-            toggleTask(task.id);
-            if (createdId) deleteTask(createdId);
-          },
+          onClick: () => toggleTask(task.id),
         },
         duration: 4000,
       });
@@ -55,6 +52,7 @@ export function TaskItem({ task, project, onEdit }: Props) {
 
   const due = task.dueDate ? parseISO(task.dueDate) : null;
   const overdue = due ? isPast(due) && !isToday(due) : false;
+  const urgent = !task.completed && due !== null && (isToday(due) || overdue);
   const dueLabel = due
     ? isToday(due)
       ? "Today"
@@ -71,6 +69,7 @@ export function TaskItem({ task, project, onEdit }: Props) {
       style={style}
       className={cn(
         "group relative flex items-center gap-2 rounded-md border border-transparent px-2 py-2 transition-colors hover:border-hairline hover:bg-surface-elevated",
+        urgent && "border-2 border-black hover:border-black",
         isDragging && "opacity-40",
       )}
     >
@@ -120,7 +119,7 @@ export function TaskItem({ task, project, onEdit }: Props) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100"
+            className="h-6 w-6 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
           >
             <MoreHorizontal className="h-3.5 w-3.5" />
           </Button>

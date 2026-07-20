@@ -1,4 +1,4 @@
-import { format, isPast, parseISO } from "date-fns";
+import { format, isPast, isToday, parseISO } from "date-fns";
 import { MoreHorizontal, Trash2, Pencil, CheckCircle2 } from "lucide-react";
 import type { Project, Task } from "@/lib/dashboard-types";
 import { useDashboard } from "@/lib/dashboard-store";
@@ -16,9 +16,10 @@ interface Props {
   project: Project;
   tasks: Task[];
   onEdit: (project: Project) => void;
+  onOpen: (project: Project) => void;
 }
 
-export function ProjectCard({ project, tasks, onEdit }: Props) {
+export function ProjectCard({ project, tasks, onEdit, onOpen }: Props) {
   const completeProject = useDashboard((s) => s.completeProject);
   const deleteProject = useDashboard((s) => s.deleteProject);
 
@@ -29,9 +30,16 @@ export function ProjectCard({ project, tasks, onEdit }: Props) {
 
   const due = project.dueDate ? parseISO(project.dueDate) : null;
   const overdue = due && isPast(due) && pct < 100;
+  const urgent = pct < 100 && due !== null && (isToday(due) || overdue);
 
   return (
-    <div className="group rounded-lg border border-hairline bg-surface-elevated p-3 transition-colors hover:border-ink-faint/40">
+    <div
+      onClick={() => onOpen(project)}
+      className={cn(
+        "group cursor-pointer rounded-lg border border-hairline bg-surface-elevated p-3 transition-colors hover:border-ink-faint/40",
+        urgent && "border-2 border-black hover:border-black",
+      )}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -57,12 +65,13 @@ export function ProjectCard({ project, tasks, onEdit }: Props) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100"
+              className="h-7 w-7 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+              onClick={(e) => e.stopPropagation()}
             >
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
             <DropdownMenuItem onClick={() => onEdit(project)}>
               <Pencil className="mr-2 h-4 w-4" /> Edit
             </DropdownMenuItem>
