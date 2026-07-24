@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -48,6 +49,7 @@ export function TaskDialog({
   const [hat, setHat] = useState<Hat>(defaultHat ?? "routine");
   const [urgency, setUrgency] = useState<Urgency>("medium");
   const [dueDate, setDueDate] = useState("");
+  const [description, setDescription] = useState("");
   const [projectId, setProjectId] = useState<string>(NONE);
   const [repeat, setRepeat] = useState<RecurrenceFreq | "none">("none");
   const [recurrenceInterval, setRecurrenceInterval] = useState(1);
@@ -59,6 +61,7 @@ export function TaskDialog({
       setHat(task?.hat ?? defaultHat ?? "routine");
       setUrgency(task?.urgency ?? "medium");
       setDueDate(task?.dueDate ?? "");
+      setDescription(task?.description ?? "");
       setProjectId(task?.projectId ?? defaultProjectId ?? NONE);
       setRepeat(task?.recurrence?.freq ?? "none");
       setRecurrenceInterval(task?.recurrence?.interval ?? 1);
@@ -84,6 +87,7 @@ export function TaskDialog({
       hat,
       urgency,
       dueDate: dueDate || undefined,
+      description: description.trim() || undefined,
       projectId: projectId === NONE ? undefined : projectId,
       recurrence:
         repeat === "none"
@@ -195,6 +199,16 @@ export function TaskDialog({
                 Due Today
               </Button>
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Description (optional)</Label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Notes, links, or details for this task"
+              rows={3}
+            />
           </div>
 
           <div className="space-y-1.5">

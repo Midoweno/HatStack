@@ -60,6 +60,7 @@ type ProjectRow = {
   name: string;
   icon: string | null;
   due_date: string | null;
+  description: string | null;
   completed: boolean;
   completed_at: string | null;
   created_at: string;
@@ -74,6 +75,7 @@ type TaskRow = {
   name: string;
   urgency: Urgency;
   due_date: string | null;
+  description: string | null;
   recurrence_freq: RecurrenceFreq | null;
   recurrence_interval: number | null;
   recurrence_until: string | null;
@@ -90,6 +92,7 @@ function projectFromRow(row: ProjectRow): Project {
     name: row.name,
     icon: row.icon ?? undefined,
     dueDate: row.due_date ?? undefined,
+    description: row.description ?? undefined,
     completed: row.completed,
     completedAt: row.completed_at ? new Date(row.completed_at).getTime() : undefined,
     createdAt: new Date(row.created_at).getTime(),
@@ -104,6 +107,7 @@ function projectToRow(userId: string, p: Project): ProjectRow {
     name: p.name,
     icon: p.icon ?? null,
     due_date: p.dueDate ?? null,
+    description: p.description ?? null,
     completed: p.completed,
     completed_at: p.completedAt ? new Date(p.completedAt).toISOString() : null,
     created_at: new Date(p.createdAt).toISOString(),
@@ -116,6 +120,7 @@ function projectPatchToRow(patch: Partial<Omit<Project, "id">>) {
   if ("name" in patch) row.name = patch.name;
   if ("icon" in patch) row.icon = patch.icon ?? null;
   if ("dueDate" in patch) row.due_date = patch.dueDate ?? null;
+  if ("description" in patch) row.description = patch.description ?? null;
   if ("completed" in patch) row.completed = patch.completed;
   if ("completedAt" in patch)
     row.completed_at = patch.completedAt ? new Date(patch.completedAt).toISOString() : null;
@@ -131,6 +136,7 @@ function taskFromRow(row: TaskRow): Task {
     name: row.name,
     urgency: row.urgency,
     dueDate: row.due_date ?? undefined,
+    description: row.description ?? undefined,
     recurrence: row.recurrence_freq
       ? {
           freq: row.recurrence_freq,
@@ -155,6 +161,7 @@ function taskToRow(userId: string, t: Task): TaskRow {
     name: t.name,
     urgency: t.urgency,
     due_date: t.dueDate ?? null,
+    description: t.description ?? null,
     recurrence_freq: t.recurrence?.freq ?? null,
     recurrence_interval: t.recurrence?.interval ?? 1,
     recurrence_until: t.recurrence?.until ?? null,
@@ -173,6 +180,7 @@ function taskPatchToRow(patch: Partial<Omit<Task, "id">>) {
   if ("name" in patch) row.name = patch.name;
   if ("urgency" in patch) row.urgency = patch.urgency;
   if ("dueDate" in patch) row.due_date = patch.dueDate ?? null;
+  if ("description" in patch) row.description = patch.description ?? null;
   if ("recurrence" in patch) {
     row.recurrence_freq = patch.recurrence?.freq ?? null;
     row.recurrence_interval = patch.recurrence?.interval ?? 1;
@@ -204,6 +212,7 @@ interface Store extends DashboardState {
     name: string;
     icon?: string;
     dueDate?: string;
+    description?: string;
   }) => Project;
   updateProject: (id: string, patch: Partial<Omit<Project, "id">>) => void;
   completeProject: (id: string) => void;
@@ -216,6 +225,7 @@ interface Store extends DashboardState {
     urgency: Urgency;
     projectId?: string;
     dueDate?: string;
+    description?: string;
     parentTaskId?: string;
     recurrence?: Recurrence;
   }) => Task;
@@ -236,6 +246,10 @@ export const useDashboard = create<Store>()((set, get) => ({
   loading: true,
 
   init: async (userId) => {
+    // Guard against redundant reloads (e.g. a transient auth blip re-firing
+    // sign-in for a user we're already subscribed to) wiping loaded state
+    // and briefly blanking the dashboard while it re-fetches.
+    if (get().userId === userId && channel) return;
     set({ loading: true, userId });
 
     const [{ data: projectRows, error: pErr }, { data: taskRows, error: tErr }] =
@@ -306,6 +320,7 @@ export const useDashboard = create<Store>()((set, get) => ({
       name: input.name,
       icon: input.icon,
       dueDate: input.dueDate,
+      description: input.description,
       completed: false,
       createdAt: Date.now(),
     };
@@ -366,6 +381,7 @@ export const useDashboard = create<Store>()((set, get) => ({
       name: input.name,
       urgency: input.urgency,
       dueDate: input.dueDate,
+      description: input.description,
       recurrence: input.recurrence,
       completed: false,
       createdAt: Date.now(),

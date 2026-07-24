@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -36,6 +37,7 @@ export function ProjectDialog({ open, onOpenChange, defaultHat, project }: Props
   const [icon, setIcon] = useState("");
   const [hat, setHat] = useState<Hat>(defaultHat ?? "work");
   const [dueDate, setDueDate] = useState("");
+  const [description, setDescription] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -43,6 +45,7 @@ export function ProjectDialog({ open, onOpenChange, defaultHat, project }: Props
       setIcon(project?.icon ?? "");
       setHat(project?.hat ?? defaultHat ?? "work");
       setDueDate(project?.dueDate ?? "");
+      setDescription(project?.description ?? "");
     }
   }, [open, project, defaultHat]);
 
@@ -54,6 +57,7 @@ export function ProjectDialog({ open, onOpenChange, defaultHat, project }: Props
         icon: icon.trim() || undefined,
         hat,
         dueDate: dueDate || undefined,
+        description: description.trim() || undefined,
       });
     } else {
       addProject({
@@ -61,6 +65,7 @@ export function ProjectDialog({ open, onOpenChange, defaultHat, project }: Props
         icon: icon.trim() || undefined,
         hat,
         dueDate: dueDate || undefined,
+        description: description.trim() || undefined,
       });
     }
     onOpenChange(false);
@@ -125,6 +130,15 @@ export function ProjectDialog({ open, onOpenChange, defaultHat, project }: Props
                 Due Today
               </Button>
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Description (optional)</Label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Notes or context for this project"
+              rows={3}
+            />
           </div>
         </div>
         <DialogFooter>

@@ -47,6 +47,12 @@ export function ProjectTasksDialog({
               </DialogTitle>
             </DialogHeader>
 
+            {project.description && (
+              <p className="whitespace-pre-wrap text-sm text-ink-soft">
+                {project.description}
+              </p>
+            )}
+
             <div className="flex items-center justify-between">
               <p className="text-xs text-ink-faint">
                 {projectTasks.length} {projectTasks.length === 1 ? "task" : "tasks"}

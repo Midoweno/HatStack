@@ -55,6 +55,7 @@ export interface Project {
   name: string;
   icon?: string;
   dueDate?: string; // ISO date
+  description?: string;
   completed: boolean;
   completedAt?: number;
   createdAt: number;
@@ -76,6 +77,7 @@ export interface Task {
   name: string;
   urgency: Urgency;
   dueDate?: string;
+  description?: string;
   recurrence?: Recurrence;
   // Set on the auto-created next occurrence of a recurring task, pointing
   // back to the task instance that was completed to spawn it. Lets undo /

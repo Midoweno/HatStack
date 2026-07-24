@@ -1,6 +1,6 @@
 import { useDraggable } from "@dnd-kit/core";
 import { differenceInCalendarDays, isPast, isToday, parseISO } from "date-fns";
-import { MoreHorizontal, Pencil, Trash2, GripVertical } from "lucide-react";
+import { MoreHorizontal, Trash2, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import type { Project, Task } from "@/lib/dashboard-types";
 import { URGENCY_META } from "@/lib/dashboard-types";
@@ -67,8 +67,9 @@ export function TaskItem({ task, project, onEdit }: Props) {
     <div
       ref={setNodeRef}
       style={style}
+      onClick={() => onEdit(task)}
       className={cn(
-        "group relative flex items-center gap-2 rounded-md border border-transparent px-2 py-2 transition-colors hover:border-hairline hover:bg-surface-elevated",
+        "group relative flex cursor-pointer items-center gap-2 rounded-md border border-transparent px-2 py-2 transition-colors hover:border-hairline hover:bg-surface-elevated",
         urgent && "border-2 border-black hover:border-black",
         isDragging && "opacity-40",
       )}
@@ -76,17 +77,16 @@ export function TaskItem({ task, project, onEdit }: Props) {
       <button
         {...attributes}
         {...listeners}
+        onClick={(e) => e.stopPropagation()}
         className="shrink-0 cursor-grab text-ink-faint/50 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
         aria-label="Drag task"
       >
         <GripVertical className="h-3.5 w-3.5" />
       </button>
 
-      <Checkbox
-        checked={task.completed}
-        onCheckedChange={handleToggle}
-        className="shrink-0"
-      />
+      <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+        <Checkbox checked={task.completed} onCheckedChange={handleToggle} />
+      </div>
 
       <div
         className={cn(
@@ -120,14 +120,12 @@ export function TaskItem({ task, project, onEdit }: Props) {
             variant="ghost"
             size="icon"
             className="h-6 w-6 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+            onClick={(e) => e.stopPropagation()}
           >
             <MoreHorizontal className="h-3.5 w-3.5" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => onEdit(task)}>
-            <Pencil className="mr-2 h-4 w-4" /> Edit
-          </DropdownMenuItem>
+        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
           <DropdownMenuItem
             className="text-destructive focus:text-destructive"
             onClick={() => deleteTask(task.id)}

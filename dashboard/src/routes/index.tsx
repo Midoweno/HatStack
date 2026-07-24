@@ -26,7 +26,7 @@ export const Route = createFileRoute("/")({
 });
 
 function IndexRoute() {
-  const { session, loading } = useAuth();
+  const { session, loading, event } = useAuth();
   const loadingData = useDashboard((s) => s.loading);
   const init = useDashboard((s) => s.init);
   const reset = useDashboard((s) => s.reset);
@@ -34,10 +34,15 @@ function IndexRoute() {
   useEffect(() => {
     if (session?.user.id) {
       init(session.user.id);
-    } else {
+    } else if (event === "SIGNED_OUT") {
+      // Only wipe loaded state on an explicit sign-out. Supabase's auth
+      // listener can momentarily report a null session during token refresh
+      // (e.g. after a mobile tab resumes from background) — treating that
+      // as a sign-out was clearing projects/tasks from the store until the
+      // user manually refreshed the page.
       reset();
     }
-  }, [session?.user.id, init, reset]);
+  }, [session?.user.id, event, init, reset]);
 
   if (loading) return null;
   if (!session) return <LoginScreen />;
