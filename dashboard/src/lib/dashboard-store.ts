@@ -233,6 +233,9 @@ interface Store extends DashboardState {
   // Returns the id of the next recurring occurrence created, if any, so
   // callers (e.g. an undo action) can remove it when reverting completion.
   toggleTask: (id: string) => string | undefined;
+  // Completes this occurrence without spawning the next one, and stops the
+  // recurrence entirely — for "we're done with this series, stop resurfacing it".
+  completeRecurringSeries: (id: string) => void;
   moveTaskToHat: (id: string, hat: Hat) => void;
   deleteTask: (id: string) => void;
 }
@@ -423,7 +426,11 @@ export const useDashboard = create<Store>()((set, get) => ({
         return toggled;
       });
 
-      if (completing && target.recurrence) {
+      // Guard against creating a second next-occurrence for the same task
+      // (e.g. a duplicate toggle replayed by a stale reconnect) — each
+      // completed occurrence should spawn exactly one successor.
+      const alreadySpawned = s.tasks.some((t) => t.recurrenceParentId === id);
+      if (completing && target.recurrence && !alreadySpawned) {
         const next = nextOccurrence(target);
         if (next) {
           tasks.push(next);
@@ -457,7 +464,11 @@ export const useDashboard = create<Store>()((set, get) => ({
       supabase
         .from("tasks")
         .insert(taskToRow(userId, created))
-        .then(({ error }) => error && reportError("add recurring task", error));
+        .then(({ error }) => {
+          // 23505 = unique_violation: another device already spawned this
+          // task's next occurrence — that's the correct outcome, not a bug.
+          if (error && error.code !== "23505") reportError("add recurring task", error);
+        });
     }
     if (userId && removedId) {
       supabase
@@ -468,6 +479,45 @@ export const useDashboard = create<Store>()((set, get) => ({
     }
 
     return createdId;
+  },
+  completeRecurringSeries: (id) => {
+    const completedAt = Date.now();
+    let removedId: string | undefined;
+
+    set((s) => {
+      const target = s.tasks.find((t) => t.id === id);
+      if (!target) return s;
+
+      let tasks = s.tasks.map((t) =>
+        t.id === id ? { ...t, completed: true, completedAt, recurrence: undefined } : t,
+      );
+
+      // Drop any next occurrence already spawned from this task, since the
+      // whole series is being ended.
+      const spawned = tasks.find((t) => t.recurrenceParentId === id && !t.completed);
+      if (spawned) {
+        tasks = tasks.filter((t) => t.id !== spawned.id);
+        removedId = spawned.id;
+      }
+
+      return { tasks };
+    });
+
+    const userId = get().userId;
+    if (userId) {
+      supabase
+        .from("tasks")
+        .update(taskPatchToRow({ completed: true, completedAt, recurrence: undefined }))
+        .eq("id", id)
+        .then(({ error }) => error && reportError("complete recurring series", error));
+      if (removedId) {
+        supabase
+          .from("tasks")
+          .delete()
+          .eq("id", removedId)
+          .then(({ error }) => error && reportError("remove recurring occurrence", error));
+      }
+    }
   },
   moveTaskToHat: (id, hat) => get().updateTask(id, { hat, projectId: undefined }),
   deleteTask: (id) => {

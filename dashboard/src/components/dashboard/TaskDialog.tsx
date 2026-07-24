@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
+import { CheckCheck } from "lucide-react";
 import { useDashboard } from "@/lib/dashboard-store";
 import type { Hat, RecurrenceFreq, Task, Urgency } from "@/lib/dashboard-types";
 import { HATS, URGENCY_META } from "@/lib/dashboard-types";
@@ -43,6 +44,7 @@ export function TaskDialog({
 }: Props) {
   const addTask = useDashboard((s) => s.addTask);
   const updateTask = useDashboard((s) => s.updateTask);
+  const completeRecurringSeries = useDashboard((s) => s.completeRecurringSeries);
   const projects = useDashboard((s) => s.projects);
 
   const [name, setName] = useState("");
@@ -103,6 +105,12 @@ export function TaskDialog({
     } else {
       addTask(payload);
     }
+    onOpenChange(false);
+  };
+
+  const finishSeries = () => {
+    if (!task) return;
+    completeRecurringSeries(task.id);
     onOpenChange(false);
   };
 
@@ -253,6 +261,16 @@ export function TaskDialog({
           )}
         </div>
         <DialogFooter>
+          {task?.recurrence && (
+            <Button
+              variant="outline"
+              className="sm:mr-auto"
+              onClick={finishSeries}
+            >
+              <CheckCheck className="mr-1.5 h-4 w-4" />
+              Complete series (stop repeating)
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
