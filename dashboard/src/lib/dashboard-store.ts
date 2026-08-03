@@ -83,6 +83,8 @@ type TaskRow = {
   completed: boolean;
   completed_at: string | null;
   created_at: string;
+  starred: boolean;
+  star_order: number | null;
 };
 
 function projectFromRow(row: ProjectRow): Project {
@@ -148,6 +150,8 @@ function taskFromRow(row: TaskRow): Task {
     completed: row.completed,
     completedAt: row.completed_at ? new Date(row.completed_at).getTime() : undefined,
     createdAt: new Date(row.created_at).getTime(),
+    starred: row.starred,
+    starOrder: row.star_order ?? undefined,
   };
 }
 
@@ -169,6 +173,8 @@ function taskToRow(userId: string, t: Task): TaskRow {
     completed: t.completed,
     completed_at: t.completedAt ? new Date(t.completedAt).toISOString() : null,
     created_at: new Date(t.createdAt).toISOString(),
+    starred: t.starred ?? false,
+    star_order: t.starOrder ?? null,
   };
 }
 
@@ -191,6 +197,8 @@ function taskPatchToRow(patch: Partial<Omit<Task, "id">>) {
   if ("completed" in patch) row.completed = patch.completed;
   if ("completedAt" in patch)
     row.completed_at = patch.completedAt ? new Date(patch.completedAt).toISOString() : null;
+  if ("starred" in patch) row.starred = patch.starred ?? false;
+  if ("starOrder" in patch) row.star_order = patch.starOrder ?? null;
   return row;
 }
 
@@ -238,6 +246,11 @@ interface Store extends DashboardState {
   completeRecurringSeries: (id: string) => void;
   moveTaskToHat: (id: string, hat: Hat) => void;
   deleteTask: (id: string) => void;
+
+  toggleStar: (id: string) => void;
+  // orderedIds is the full set of starred tasks in the Priority view's new
+  // order (top to bottom) after a drag-reorder.
+  reorderPriority: (orderedIds: string[]) => void;
 }
 
 let channel: RealtimeChannel | null = null;
@@ -527,5 +540,44 @@ export const useDashboard = create<Store>()((set, get) => ({
       .delete()
       .eq("id", id)
       .then(({ error }) => error && reportError("delete task", error));
+  },
+
+  toggleStar: (id) => {
+    let patch: { starred: boolean; starOrder?: number } | undefined;
+    set((s) => ({
+      tasks: s.tasks.map((t) => {
+        if (t.id !== id) return t;
+        const starred = !t.starred;
+        patch = { starred, starOrder: starred ? Date.now() : t.starOrder };
+        return { ...t, ...patch };
+      }),
+    }));
+    const userId = get().userId;
+    if (userId && patch) {
+      supabase
+        .from("tasks")
+        .update(taskPatchToRow(patch))
+        .eq("id", id)
+        .then(({ error }) => error && reportError("star task", error));
+    }
+  },
+  reorderPriority: (orderedIds) => {
+    const base = Date.now();
+    const orderMap = new Map(orderedIds.map((id, i) => [id, base - i]));
+    set((s) => ({
+      tasks: s.tasks.map((t) =>
+        orderMap.has(t.id) ? { ...t, starOrder: orderMap.get(t.id)! } : t,
+      ),
+    }));
+    const userId = get().userId;
+    if (userId) {
+      orderedIds.forEach((id, i) => {
+        supabase
+          .from("tasks")
+          .update({ star_order: base - i })
+          .eq("id", id)
+          .then(({ error }) => error && reportError("reorder priority list", error));
+      });
+    }
   },
 }));

@@ -86,6 +86,10 @@ export interface Task {
   completed: boolean;
   completedAt?: number;
   createdAt: number;
+  // Pinned to the one-column Priority view (a second lens on the same
+  // tasks, not a separate list). starOrder ranks position within that view.
+  starred?: boolean;
+  starOrder?: number;
 }
 
 export interface DashboardState {

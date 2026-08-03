@@ -1,6 +1,8 @@
 import { useDraggable } from "@dnd-kit/core";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { differenceInCalendarDays, isPast, isToday, parseISO } from "date-fns";
-import { MoreHorizontal, Trash2, GripVertical } from "lucide-react";
+import { MoreHorizontal, Trash2, GripVertical, Star } from "lucide-react";
 import { toast } from "sonner";
 import type { Project, Task } from "@/lib/dashboard-types";
 import { URGENCY_META } from "@/lib/dashboard-types";
@@ -19,11 +21,15 @@ interface Props {
   task: Task;
   project?: Project;
   onEdit: (task: Task) => void;
+  // "hat" drags the task between hat columns (default). "sortable" reorders
+  // it within a single list (the Priority view).
+  dragMode?: "hat" | "sortable";
 }
 
-export function TaskItem({ task, project, onEdit }: Props) {
+export function TaskItem({ task, project, onEdit, dragMode = "hat" }: Props) {
   const toggleTask = useDashboard((s) => s.toggleTask);
   const deleteTask = useDashboard((s) => s.deleteTask);
+  const toggleStar = useDashboard((s) => s.toggleStar);
   const u = URGENCY_META[task.urgency];
 
   const handleToggle = () => {
@@ -41,14 +47,22 @@ export function TaskItem({ task, project, onEdit }: Props) {
     }
   };
 
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const hatDrag = useDraggable({
     id: `task-${task.id}`,
     data: { taskId: task.id },
+    disabled: dragMode !== "hat",
   });
+  const sortableDrag = useSortable({ id: task.id, disabled: dragMode !== "sortable" });
 
-  const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
-    : undefined;
+  const { attributes, listeners, setNodeRef, isDragging } =
+    dragMode === "sortable" ? sortableDrag : hatDrag;
+
+  const style =
+    dragMode === "sortable"
+      ? { transform: CSS.Transform.toString(sortableDrag.transform), transition: sortableDrag.transition }
+      : hatDrag.transform
+        ? { transform: `translate3d(${hatDrag.transform.x}px, ${hatDrag.transform.y}px, 0)` }
+        : undefined;
 
   const due = task.dueDate ? parseISO(task.dueDate) : null;
   const overdue = due ? isPast(due) && !isToday(due) : false;
@@ -113,6 +127,24 @@ export function TaskItem({ task, project, onEdit }: Props) {
           </div>
         )}
       </div>
+
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn(
+          "h-6 w-6 shrink-0",
+          task.starred
+            ? "text-amber-500 opacity-100"
+            : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100",
+        )}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleStar(task.id);
+        }}
+        aria-label={task.starred ? "Remove from Priority view" : "Add to Priority view"}
+      >
+        <Star className={cn("h-3.5 w-3.5", task.starred && "fill-current")} />
+      </Button>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

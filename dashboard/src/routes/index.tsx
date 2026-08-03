@@ -13,13 +13,17 @@ import { HATS, type Hat, type Project, type Task } from "@/lib/dashboard-types";
 import { useDashboard } from "@/lib/dashboard-store";
 import { useAuth } from "@/lib/use-auth";
 import { supabase } from "@/lib/supabase";
+import { cn } from "@/lib/utils";
 import { LoginScreen } from "@/components/auth/LoginScreen";
 import { Button } from "@/components/ui/button";
 import { HatColumn } from "@/components/dashboard/HatColumn";
+import { PriorityList } from "@/components/dashboard/PriorityList";
 import { ProjectDialog } from "@/components/dashboard/ProjectDialog";
 import { TaskDialog } from "@/components/dashboard/TaskDialog";
 import { ArchiveSheet } from "@/components/dashboard/ArchiveSheet";
 import { ProjectTasksDialog } from "@/components/dashboard/ProjectTasksDialog";
+
+type ViewMode = "hats" | "priority";
 
 export const Route = createFileRoute("/")({
   component: IndexRoute,
@@ -69,6 +73,7 @@ function Dashboard() {
   }>({ open: false });
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [openProject, setOpenProject] = useState<Project | null>(null);
+  const [view, setView] = useState<ViewMode>("hats");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -93,6 +98,25 @@ function Dashboard() {
             <h1 className="mt-1 font-display text-4xl text-ink sm:text-5xl">
               What are we wearing today?
             </h1>
+            <div className="mt-3 inline-flex rounded-full border border-hairline bg-surface p-0.5">
+              {([
+                { id: "hats", label: "Hats" },
+                { id: "priority", label: "Priority" },
+              ] as const).map((v) => (
+                <button
+                  key={v.id}
+                  onClick={() => setView(v.id)}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                    view === v.id
+                      ? "bg-ink text-background"
+                      : "text-ink-faint hover:text-ink-soft",
+                  )}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex flex-wrap shrink-0 gap-2">
             <Button
@@ -125,32 +149,40 @@ function Dashboard() {
       </header>
 
       <main className="mx-auto max-w-[1600px] px-6 pb-16 sm:px-10">
-        <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-            {HATS.map((h) => (
-              <HatColumn
-                key={h.id}
-                hat={h.id}
-                label={h.label}
-                projects={projects}
-                tasks={tasks}
-                onAddProject={() =>
-                  setProjectDialog({ open: true, hat: h.id, project: null })
-                }
-                onAddTask={() =>
-                  setTaskDialog({ open: true, hat: h.id, task: null })
-                }
-                onEditProject={(p) =>
-                  setProjectDialog({ open: true, hat: p.hat, project: p })
-                }
-                onEditTask={(t) =>
-                  setTaskDialog({ open: true, hat: t.hat, task: t })
-                }
-                onOpenProject={(p) => setOpenProject(p)}
-              />
-            ))}
-          </div>
-        </DndContext>
+        {view === "hats" ? (
+          <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+              {HATS.map((h) => (
+                <HatColumn
+                  key={h.id}
+                  hat={h.id}
+                  label={h.label}
+                  projects={projects}
+                  tasks={tasks}
+                  onAddProject={() =>
+                    setProjectDialog({ open: true, hat: h.id, project: null })
+                  }
+                  onAddTask={() =>
+                    setTaskDialog({ open: true, hat: h.id, task: null })
+                  }
+                  onEditProject={(p) =>
+                    setProjectDialog({ open: true, hat: p.hat, project: p })
+                  }
+                  onEditTask={(t) =>
+                    setTaskDialog({ open: true, hat: t.hat, task: t })
+                  }
+                  onOpenProject={(p) => setOpenProject(p)}
+                />
+              ))}
+            </div>
+          </DndContext>
+        ) : (
+          <PriorityList
+            tasks={tasks}
+            projects={projects}
+            onEditTask={(t) => setTaskDialog({ open: true, hat: t.hat, task: t })}
+          />
+        )}
 
         <footer className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-ink-faint">
           <span className="uppercase tracking-[0.14em]">Urgency</span>
