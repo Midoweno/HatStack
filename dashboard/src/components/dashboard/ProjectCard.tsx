@@ -1,4 +1,4 @@
-import { format, isPast, isToday, parseISO } from "date-fns";
+import { differenceInCalendarDays, format, isPast, isToday, parseISO } from "date-fns";
 import { MoreHorizontal, Trash2, Pencil, CheckCircle2 } from "lucide-react";
 import type { Project, Task } from "@/lib/dashboard-types";
 import { useDashboard } from "@/lib/dashboard-store";
@@ -31,6 +31,15 @@ export function ProjectCard({ project, tasks, onEdit, onOpen }: Props) {
   const due = project.dueDate ? parseISO(project.dueDate) : null;
   const overdue = due && isPast(due) && pct < 100;
   const urgent = pct < 100 && due !== null && (isToday(due) || overdue);
+  const relativeDue = due
+    ? isToday(due)
+      ? "today"
+      : (() => {
+          const days = Math.abs(differenceInCalendarDays(due, new Date()));
+          const unit = days === 1 ? "day" : "days";
+          return overdue ? `${days} ${unit} overdue` : `in ${days} ${unit}`;
+        })()
+    : null;
 
   return (
     <div
@@ -56,6 +65,7 @@ export function ProjectCard({ project, tasks, onEdit, onOpen }: Props) {
               )}
             >
               Due {format(due, "MMM d, yyyy")}
+              {relativeDue && <span className="opacity-70"> ({relativeDue})</span>}
             </p>
           )}
         </div>

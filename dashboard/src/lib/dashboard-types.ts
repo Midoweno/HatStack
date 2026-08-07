@@ -86,10 +86,13 @@ export interface Task {
   completed: boolean;
   completedAt?: number;
   createdAt: number;
-  // Pinned to the one-column Priority view (a second lens on the same
-  // tasks, not a separate list). starOrder ranks position within that view.
+  // Pinned to the Priority view (a second lens on the same tasks, not a
+  // separate list). starOrder ranks position within its column; starBucket
+  // picks the column — undefined/"priority" is the top "Priority" column,
+  // "future" is the lower one that newly-starred tasks land in by default.
   starred?: boolean;
   starOrder?: number;
+  starBucket?: "priority" | "future";
 }
 
 export interface DashboardState {

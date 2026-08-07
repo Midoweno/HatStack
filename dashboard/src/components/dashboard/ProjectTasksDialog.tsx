@@ -28,7 +28,7 @@ export function ProjectTasksDialog({
   const projectTasks = useMemo(() => {
     if (!project) return [];
     return tasks
-      .filter((t) => t.projectId === project.id)
+      .filter((t) => t.projectId === project.id && !t.parentTaskId)
       .sort((a, b) => {
         if (a.completed !== b.completed) return a.completed ? 1 : -1;
         return (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999");
@@ -70,7 +70,13 @@ export function ProjectTasksDialog({
             ) : (
               <div className="-mx-2 space-y-0.5">
                 {projectTasks.map((t) => (
-                  <TaskItem key={t.id} task={t} project={project} onEdit={onEditTask} />
+                  <TaskItem
+                    key={t.id}
+                    task={t}
+                    project={project}
+                    onEdit={onEditTask}
+                    keepOnComplete
+                  />
                 ))}
               </div>
             )}

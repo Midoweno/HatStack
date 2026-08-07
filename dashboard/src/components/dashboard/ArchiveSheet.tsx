@@ -33,7 +33,7 @@ export function ArchiveSheet({ open, onOpenChange }: Props) {
   const toggleTask = useDashboard((s) => s.toggleTask);
   const deleteTask = useDashboard((s) => s.deleteTask);
   const completedTasks = tasks
-    .filter((t) => t.completed)
+    .filter((t) => t.completed && !t.parentTaskId)
     .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0));
 
   const groupedCompletedTasks = useMemo(() => {

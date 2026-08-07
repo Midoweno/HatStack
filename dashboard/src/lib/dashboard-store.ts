@@ -85,6 +85,7 @@ type TaskRow = {
   created_at: string;
   starred: boolean;
   star_order: number | null;
+  star_bucket: "priority" | "future" | null;
 };
 
 function projectFromRow(row: ProjectRow): Project {
@@ -152,6 +153,7 @@ function taskFromRow(row: TaskRow): Task {
     createdAt: new Date(row.created_at).getTime(),
     starred: row.starred,
     starOrder: row.star_order ?? undefined,
+    starBucket: row.star_bucket ?? undefined,
   };
 }
 
@@ -175,6 +177,7 @@ function taskToRow(userId: string, t: Task): TaskRow {
     created_at: new Date(t.createdAt).toISOString(),
     starred: t.starred ?? false,
     star_order: t.starOrder ?? null,
+    star_bucket: t.starBucket ?? null,
   };
 }
 
@@ -199,6 +202,7 @@ function taskPatchToRow(patch: Partial<Omit<Task, "id">>) {
     row.completed_at = patch.completedAt ? new Date(patch.completedAt).toISOString() : null;
   if ("starred" in patch) row.starred = patch.starred ?? false;
   if ("starOrder" in patch) row.star_order = patch.starOrder ?? null;
+  if ("starBucket" in patch) row.star_bucket = patch.starBucket ?? null;
   return row;
 }
 
@@ -248,9 +252,11 @@ interface Store extends DashboardState {
   deleteTask: (id: string) => void;
 
   toggleStar: (id: string) => void;
-  // orderedIds is the full set of starred tasks in the Priority view's new
-  // order (top to bottom) after a drag-reorder.
-  reorderPriority: (orderedIds: string[]) => void;
+  // Sets the given column's full top-to-bottom order after a drag (within a
+  // column, or moved in from the other one). orderedIds must include the
+  // moved task if this is a cross-column move — its starBucket is set to
+  // `bucket` along with everyone else's rank.
+  setStarredOrder: (bucket: "priority" | "future", orderedIds: string[]) => void;
 }
 
 let channel: RealtimeChannel | null = null;
@@ -534,21 +540,39 @@ export const useDashboard = create<Store>()((set, get) => ({
   },
   moveTaskToHat: (id, hat) => get().updateTask(id, { hat, projectId: undefined }),
   deleteTask: (id) => {
-    set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }));
+    const subtaskIds = get()
+      .tasks.filter((t) => t.parentTaskId === id)
+      .map((t) => t.id);
+    set((s) => ({
+      tasks: s.tasks.filter((t) => t.id !== id && t.parentTaskId !== id),
+    }));
     supabase
       .from("tasks")
       .delete()
       .eq("id", id)
       .then(({ error }) => error && reportError("delete task", error));
+    if (subtaskIds.length) {
+      supabase
+        .from("tasks")
+        .delete()
+        .in("id", subtaskIds)
+        .then(({ error }) => error && reportError("delete subtasks", error));
+    }
   },
 
   toggleStar: (id) => {
-    let patch: { starred: boolean; starOrder?: number } | undefined;
+    let patch: { starred: boolean; starOrder?: number; starBucket?: "priority" | "future" } | undefined;
     set((s) => ({
       tasks: s.tasks.map((t) => {
         if (t.id !== id) return t;
         const starred = !t.starred;
-        patch = { starred, starOrder: starred ? Date.now() : t.starOrder };
+        // Newly-starred tasks land in "Future"; the user promotes them to
+        // "Priority" by dragging.
+        patch = {
+          starred,
+          starOrder: starred ? Date.now() : t.starOrder,
+          starBucket: starred ? "future" : t.starBucket,
+        };
         return { ...t, ...patch };
       }),
     }));
@@ -561,12 +585,12 @@ export const useDashboard = create<Store>()((set, get) => ({
         .then(({ error }) => error && reportError("star task", error));
     }
   },
-  reorderPriority: (orderedIds) => {
+  setStarredOrder: (bucket, orderedIds) => {
     const base = Date.now();
     const orderMap = new Map(orderedIds.map((id, i) => [id, base - i]));
     set((s) => ({
       tasks: s.tasks.map((t) =>
-        orderMap.has(t.id) ? { ...t, starOrder: orderMap.get(t.id)! } : t,
+        orderMap.has(t.id) ? { ...t, starBucket: bucket, starOrder: orderMap.get(t.id)! } : t,
       ),
     }));
     const userId = get().userId;
@@ -574,7 +598,7 @@ export const useDashboard = create<Store>()((set, get) => ({
       orderedIds.forEach((id, i) => {
         supabase
           .from("tasks")
-          .update({ star_order: base - i })
+          .update({ star_bucket: bucket, star_order: base - i })
           .eq("id", id)
           .then(({ error }) => error && reportError("reorder priority list", error));
       });

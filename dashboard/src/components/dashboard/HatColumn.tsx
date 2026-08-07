@@ -37,7 +37,7 @@ export function HatColumn({
     .sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"));
 
   const activeTasks = tasks
-    .filter((t) => t.hat === hat && !t.completed)
+    .filter((t) => t.hat === hat && !t.completed && !t.parentTaskId)
     .sort((a, b) => {
       const ua = URGENCY_ORDER[a.urgency];
       const ub = URGENCY_ORDER[b.urgency];
