@@ -95,7 +95,26 @@ export interface Task {
   starBucket?: "priority" | "future";
 }
 
+// One free-text workout note per real calendar date (not "day of week") so
+// history stays put as you navigate to past/future weeks in the FIT view.
+export interface Workout {
+  id: string;
+  date: string; // ISO date, yyyy-MM-dd
+  notes: string;
+  createdAt: number;
+}
+
+// A reusable named entry in the FIT drill library, draggable into a day.
+export interface Drill {
+  id: string;
+  name: string;
+  position: number;
+  createdAt: number;
+}
+
 export interface DashboardState {
   projects: Project[];
   tasks: Task[];
+  workouts: Workout[];
+  drills: Drill[];
 }

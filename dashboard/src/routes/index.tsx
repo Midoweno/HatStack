@@ -18,12 +18,14 @@ import { LoginScreen } from "@/components/auth/LoginScreen";
 import { Button } from "@/components/ui/button";
 import { HatColumn } from "@/components/dashboard/HatColumn";
 import { PriorityList } from "@/components/dashboard/PriorityList";
+import { FitView } from "@/components/dashboard/FitView";
+import { CalendarView } from "@/components/dashboard/CalendarView";
 import { ProjectDialog } from "@/components/dashboard/ProjectDialog";
 import { TaskDialog } from "@/components/dashboard/TaskDialog";
 import { ArchiveSheet } from "@/components/dashboard/ArchiveSheet";
 import { ProjectTasksDialog } from "@/components/dashboard/ProjectTasksDialog";
 
-type ViewMode = "hats" | "priority";
+type ViewMode = "hats" | "priority" | "fit" | "calendar";
 
 export const Route = createFileRoute("/")({
   component: IndexRoute,
@@ -102,6 +104,8 @@ function Dashboard() {
               {([
                 { id: "hats", label: "Hats" },
                 { id: "priority", label: "Priority" },
+                { id: "fit", label: "FIT" },
+                { id: "calendar", label: "Calendar" },
               ] as const).map((v) => (
                 <button
                   key={v.id}
@@ -176,29 +180,38 @@ function Dashboard() {
               ))}
             </div>
           </DndContext>
-        ) : (
+        ) : view === "priority" ? (
           <PriorityList
             tasks={tasks}
             projects={projects}
             onEditTask={(t) => setTaskDialog({ open: true, hat: t.hat, task: t })}
           />
+        ) : view === "fit" ? (
+          <FitView />
+        ) : (
+          <CalendarView
+            tasks={tasks}
+            onEditTask={(t) => setTaskDialog({ open: true, hat: t.hat, task: t })}
+          />
         )}
 
-        <footer className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-ink-faint">
-          <span className="uppercase tracking-[0.14em]">Urgency</span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-urgency-critical" /> Critical
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-urgency-high" /> High
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-urgency-medium" /> Medium
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-urgency-low" /> Low
-          </span>
-        </footer>
+        {view !== "fit" && (
+          <footer className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-ink-faint">
+            <span className="uppercase tracking-[0.14em]">Urgency</span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-urgency-critical" /> Critical
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-urgency-high" /> High
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-urgency-medium" /> Medium
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-urgency-low" /> Low
+            </span>
+          </footer>
+        )}
       </main>
 
       <ProjectDialog

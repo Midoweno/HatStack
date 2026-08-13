@@ -206,17 +206,17 @@ function PriorityColumn({
   const items = ids.map((id) => taskById.get(id)).filter((t): t is Task => !!t);
 
   return (
-    <div>
-      <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-        {label}
-      </h3>
-      <div
-        ref={setNodeRef}
-        className={cn(
-          "min-h-[64px] rounded-2xl border border-hairline-strong bg-surface p-3 transition-colors",
-          isOver && "border-ink/30 bg-accent/40",
-        )}
-      >
+    <div
+      className={cn(
+        "rounded-2xl border border-hairline-strong bg-surface transition-colors",
+        isOver && "border-ink/30 bg-accent/40",
+      )}
+    >
+      <header className="flex items-baseline justify-between border-b border-hairline px-5 pt-5 pb-4">
+        <h2 className="font-display text-2xl text-ink">{label}</h2>
+        <span className="text-xs tabular-nums text-ink-faint">{items.length}</span>
+      </header>
+      <div ref={setNodeRef} className="min-h-[64px] p-3">
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           {items.length === 0 ? (
             <p className="px-2 py-4 text-center text-xs text-ink-faint">{emptyLabel}</p>

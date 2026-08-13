@@ -5,12 +5,14 @@ import { toast } from "sonner";
 import { supabase } from "./supabase";
 import type {
   DashboardState,
+  Drill,
   Hat,
   Project,
   Recurrence,
   RecurrenceFreq,
   Task,
   Urgency,
+  Workout,
 } from "./dashboard-types";
 
 const uid = () =>
@@ -206,6 +208,60 @@ function taskPatchToRow(patch: Partial<Omit<Task, "id">>) {
   return row;
 }
 
+type WorkoutRow = {
+  id: string;
+  user_id: string;
+  date: string;
+  notes: string;
+  created_at: string;
+};
+
+type DrillRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  position: number;
+  created_at: string;
+};
+
+function workoutFromRow(row: WorkoutRow): Workout {
+  return {
+    id: row.id,
+    date: row.date,
+    notes: row.notes,
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+function workoutToRow(userId: string, w: Workout): WorkoutRow {
+  return {
+    id: w.id,
+    user_id: userId,
+    date: w.date,
+    notes: w.notes,
+    created_at: new Date(w.createdAt).toISOString(),
+  };
+}
+
+function drillFromRow(row: DrillRow): Drill {
+  return {
+    id: row.id,
+    name: row.name,
+    position: row.position,
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+function drillToRow(userId: string, d: Drill): DrillRow {
+  return {
+    id: d.id,
+    user_id: userId,
+    name: d.name,
+    position: d.position,
+    created_at: new Date(d.createdAt).toISOString(),
+  };
+}
+
 function reportError(action: string, error: { message: string }) {
   console.error(`[dashboard-store] ${action} failed:`, error.message);
   toast.error(`Couldn't save: ${action}`, { description: error.message });
@@ -240,6 +296,7 @@ interface Store extends DashboardState {
     description?: string;
     parentTaskId?: string;
     recurrence?: Recurrence;
+    starred?: boolean;
   }) => Task;
   updateTask: (id: string, patch: Partial<Omit<Task, "id">>) => void;
   // Returns the id of the next recurring occurrence created, if any, so
@@ -257,6 +314,14 @@ interface Store extends DashboardState {
   // moved task if this is a cross-column move — its starBucket is set to
   // `bucket` along with everyone else's rank.
   setStarredOrder: (bucket: "priority" | "future", orderedIds: string[]) => void;
+
+  // Upserts the free-text workout note for a given real calendar date
+  // (yyyy-MM-dd). Passing empty notes deletes the entry.
+  setWorkoutNote: (date: string, notes: string) => void;
+  addDrill: (name: string) => Drill;
+  updateDrill: (id: string, name: string) => void;
+  deleteDrill: (id: string) => void;
+  reorderDrills: (orderedIds: string[]) => void;
 }
 
 let channel: RealtimeChannel | null = null;
@@ -264,6 +329,8 @@ let channel: RealtimeChannel | null = null;
 export const useDashboard = create<Store>()((set, get) => ({
   projects: [],
   tasks: [],
+  workouts: [],
+  drills: [],
   userId: null,
   loading: true,
 
@@ -274,18 +341,28 @@ export const useDashboard = create<Store>()((set, get) => ({
     if (get().userId === userId && channel) return;
     set({ loading: true, userId });
 
-    const [{ data: projectRows, error: pErr }, { data: taskRows, error: tErr }] =
-      await Promise.all([
-        supabase.from("projects").select("*").eq("user_id", userId),
-        supabase.from("tasks").select("*").eq("user_id", userId),
-      ]);
+    const [
+      { data: projectRows, error: pErr },
+      { data: taskRows, error: tErr },
+      { data: workoutRows, error: wErr },
+      { data: drillRows, error: dErr },
+    ] = await Promise.all([
+      supabase.from("projects").select("*").eq("user_id", userId),
+      supabase.from("tasks").select("*").eq("user_id", userId),
+      supabase.from("workouts").select("*").eq("user_id", userId),
+      supabase.from("drills").select("*").eq("user_id", userId),
+    ]);
 
     if (pErr) reportError("load projects", pErr);
     if (tErr) reportError("load tasks", tErr);
+    if (wErr) reportError("load workouts", wErr);
+    if (dErr) reportError("load drills", dErr);
 
     set({
       projects: (projectRows ?? []).map(projectFromRow),
       tasks: (taskRows ?? []).map(taskFromRow),
+      workouts: (workoutRows ?? []).map(workoutFromRow),
+      drills: (drillRows ?? []).map(drillFromRow),
       loading: false,
     });
 
@@ -326,13 +403,47 @@ export const useDashboard = create<Store>()((set, get) => ({
           }));
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "workouts", filter: `user_id=eq.${userId}` },
+        (payload) => {
+          if (payload.eventType === "DELETE") {
+            const id = (payload.old as { id: string }).id;
+            set((s) => ({ workouts: s.workouts.filter((w) => w.id !== id) }));
+            return;
+          }
+          const workout = workoutFromRow(payload.new as WorkoutRow);
+          set((s) => ({
+            workouts: s.workouts.some((w) => w.id === workout.id)
+              ? s.workouts.map((w) => (w.id === workout.id ? workout : w))
+              : [...s.workouts, workout],
+          }));
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "drills", filter: `user_id=eq.${userId}` },
+        (payload) => {
+          if (payload.eventType === "DELETE") {
+            const id = (payload.old as { id: string }).id;
+            set((s) => ({ drills: s.drills.filter((d) => d.id !== id) }));
+            return;
+          }
+          const drill = drillFromRow(payload.new as DrillRow);
+          set((s) => ({
+            drills: s.drills.some((d) => d.id === drill.id)
+              ? s.drills.map((d) => (d.id === drill.id ? drill : d))
+              : [...s.drills, drill],
+          }));
+        },
+      )
       .subscribe();
   },
 
   reset: () => {
     channel?.unsubscribe();
     channel = null;
-    set({ projects: [], tasks: [], userId: null, loading: true });
+    set({ projects: [], tasks: [], workouts: [], drills: [], userId: null, loading: true });
   },
 
   addProject: (input) => {
@@ -407,6 +518,10 @@ export const useDashboard = create<Store>()((set, get) => ({
       recurrence: input.recurrence,
       completed: false,
       createdAt: Date.now(),
+      starred: input.starred,
+      // Matches toggleStar: newly-starred tasks land in "Future".
+      starOrder: input.starred ? Date.now() : undefined,
+      starBucket: input.starred ? "future" : undefined,
     };
     set((s) => ({ tasks: [...s.tasks, task] }));
     const userId = get().userId;
@@ -601,6 +716,95 @@ export const useDashboard = create<Store>()((set, get) => ({
           .update({ star_bucket: bucket, star_order: base - i })
           .eq("id", id)
           .then(({ error }) => error && reportError("reorder priority list", error));
+      });
+    }
+  },
+
+  setWorkoutNote: (date, notes) => {
+    const trimmed = notes.trim();
+    const existing = get().workouts.find((w) => w.date === date);
+    const userId = get().userId;
+
+    if (!trimmed) {
+      if (!existing) return;
+      set((s) => ({ workouts: s.workouts.filter((w) => w.date !== date) }));
+      if (userId) {
+        supabase
+          .from("workouts")
+          .delete()
+          .eq("id", existing.id)
+          .then(({ error }) => error && reportError("clear workout", error));
+      }
+      return;
+    }
+
+    if (existing) {
+      const updated = { ...existing, notes: trimmed };
+      set((s) => ({ workouts: s.workouts.map((w) => (w.id === existing.id ? updated : w)) }));
+      if (userId) {
+        supabase
+          .from("workouts")
+          .update({ notes: trimmed })
+          .eq("id", existing.id)
+          .then(({ error }) => error && reportError("save workout", error));
+      }
+    } else {
+      const workout: Workout = { id: uid(), date, notes: trimmed, createdAt: Date.now() };
+      set((s) => ({ workouts: [...s.workouts, workout] }));
+      if (userId) {
+        supabase
+          .from("workouts")
+          .insert(workoutToRow(userId, workout))
+          .then(({ error }) => error && reportError("save workout", error));
+      }
+    }
+  },
+  addDrill: (name) => {
+    const maxPosition = get().drills.reduce((max, d) => Math.max(max, d.position), -1);
+    const drill: Drill = { id: uid(), name, position: maxPosition + 1, createdAt: Date.now() };
+    set((s) => ({ drills: [...s.drills, drill] }));
+    const userId = get().userId;
+    if (userId) {
+      supabase
+        .from("drills")
+        .insert(drillToRow(userId, drill))
+        .then(({ error }) => error && reportError("add drill", error));
+    }
+    return drill;
+  },
+  updateDrill: (id, name) => {
+    set((s) => ({ drills: s.drills.map((d) => (d.id === id ? { ...d, name } : d)) }));
+    supabase
+      .from("drills")
+      .update({ name })
+      .eq("id", id)
+      .then(({ error }) => error && reportError("update drill", error));
+  },
+  deleteDrill: (id) => {
+    set((s) => ({ drills: s.drills.filter((d) => d.id !== id) }));
+    supabase
+      .from("drills")
+      .delete()
+      .eq("id", id)
+      .then(({ error }) => error && reportError("delete drill", error));
+  },
+  reorderDrills: (orderedIds) => {
+    set((s) => {
+      const positionById = new Map(orderedIds.map((id, i) => [id, i]));
+      return {
+        drills: s.drills.map((d) =>
+          positionById.has(d.id) ? { ...d, position: positionById.get(d.id)! } : d,
+        ),
+      };
+    });
+    const userId = get().userId;
+    if (userId) {
+      orderedIds.forEach((id, i) => {
+        supabase
+          .from("drills")
+          .update({ position: i })
+          .eq("id", id)
+          .then(({ error }) => error && reportError("reorder drills", error));
       });
     }
   },

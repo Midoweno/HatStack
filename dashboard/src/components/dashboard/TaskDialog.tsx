@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { CheckCheck } from "lucide-react";
+import { CheckCheck, Star } from "lucide-react";
 import { useDashboard } from "@/lib/dashboard-store";
 import type { Hat, RecurrenceFreq, Task, Urgency } from "@/lib/dashboard-types";
 import { HATS, URGENCY_META } from "@/lib/dashboard-types";
@@ -52,6 +52,7 @@ export function TaskDialog({
   const [urgency, setUrgency] = useState<Urgency>("medium");
   const [dueDate, setDueDate] = useState("");
   const [description, setDescription] = useState("");
+  const [starred, setStarred] = useState(false);
   const [projectId, setProjectId] = useState<string>(NONE);
   const [repeat, setRepeat] = useState<RecurrenceFreq | "none">("none");
   const [recurrenceInterval, setRecurrenceInterval] = useState(1);
@@ -64,6 +65,7 @@ export function TaskDialog({
       setUrgency(task?.urgency ?? "medium");
       setDueDate(task?.dueDate ?? "");
       setDescription(task?.description ?? "");
+      setStarred(task?.starred ?? false);
       setProjectId(task?.projectId ?? defaultProjectId ?? NONE);
       setRepeat(task?.recurrence?.freq ?? "none");
       setRecurrenceInterval(task?.recurrence?.interval ?? 1);
@@ -99,9 +101,17 @@ export function TaskDialog({
               interval: Math.max(1, recurrenceInterval || 1),
               until: recurrenceEnd || undefined,
             },
+      starred,
     };
     if (task) {
-      updateTask(task.id, payload);
+      // Matches toggleStar: only newly-starring (not un-starring or leaving
+      // it starred) sends it to "Future" and bumps it to the top of that
+      // column — otherwise an edit shouldn't disturb its existing position.
+      const justStarred = starred && !task.starred;
+      updateTask(task.id, {
+        ...payload,
+        ...(justStarred ? { starOrder: Date.now(), starBucket: "future" as const } : {}),
+      });
     } else {
       addTask(payload);
     }
@@ -123,12 +133,25 @@ export function TaskDialog({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label>Task</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Email professor today"
-              autoFocus
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Email professor today"
+                autoFocus
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className={cn("shrink-0", starred && "border-amber-500 text-amber-500")}
+                onClick={() => setStarred((v) => !v)}
+                aria-label={starred ? "Remove from Priority view" : "Add to Priority view"}
+              >
+                <Star className={cn("h-4 w-4", starred && "fill-current")} />
+              </Button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
