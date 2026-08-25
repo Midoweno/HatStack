@@ -1,6 +1,7 @@
 import { useMemo } from "react";
-import { Plus } from "lucide-react";
+import { CheckCircle2, Plus } from "lucide-react";
 import type { Project, Task } from "@/lib/dashboard-types";
+import { useDashboard } from "@/lib/dashboard-store";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,7 @@ export function ProjectTasksDialog({
   onEditTask,
   onAddTask,
 }: Props) {
+  const completeProject = useDashboard((s) => s.completeProject);
   const projectTasks = useMemo(() => {
     if (!project) return [];
     return tasks
@@ -46,6 +48,21 @@ export function ProjectTasksDialog({
                 {project.name}
               </DialogTitle>
             </DialogHeader>
+
+            {!project.completed && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="self-start"
+                onClick={() => {
+                  completeProject(project.id);
+                  onOpenChange(false);
+                }}
+              >
+                <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                Complete project
+              </Button>
+            )}
 
             {project.description && (
               <p className="whitespace-pre-wrap text-sm text-ink-soft">

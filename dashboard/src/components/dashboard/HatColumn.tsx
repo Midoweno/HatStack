@@ -124,16 +124,25 @@ export function HatColumn({
             Nothing to do — add a task
           </button>
         ) : (
-          <div className="-mx-2 space-y-0.5">
-            {activeTasks.map((t) => (
-              <TaskItem
-                key={t.id}
-                task={t}
-                project={t.projectId ? projectById.get(t.projectId) : undefined}
-                onEdit={onEditTask}
-              />
-            ))}
-          </div>
+          <>
+            <div className="-mx-2 space-y-0.5">
+              {activeTasks.map((t) => (
+                <TaskItem
+                  key={t.id}
+                  task={t}
+                  project={t.projectId ? projectById.get(t.projectId) : undefined}
+                  onEdit={onEditTask}
+                />
+              ))}
+            </div>
+            <button
+              onClick={onAddTask}
+              className="mt-3 flex w-full items-center justify-center rounded-lg border border-dashed border-hairline py-3 text-ink-faint transition-colors hover:border-ink-faint/50 hover:text-ink-soft"
+              aria-label="Add task"
+            >
+              <Plus className="h-5 w-5" />
+            </button>
+          </>
         )}
       </section>
     </div>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { addDays, addWeeks, format, isToday, startOfWeek } from "date-fns";
 import {
   DndContext,
@@ -49,13 +49,26 @@ export function FitView() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
+  // Guards against double-firing: Enter (or the blur that follows closing
+  // the field) can both try to resolve the same edit.
+  const dayEditResolvedRef = useRef(false);
+
   const openDay = (dateKey: string) => {
+    dayEditResolvedRef.current = false;
     setEditingDate(dateKey);
     setDraft(workoutByDate.get(dateKey)?.notes ?? "");
   };
 
   const saveDay = () => {
+    if (dayEditResolvedRef.current) return;
+    dayEditResolvedRef.current = true;
     if (editingDate) setWorkoutNote(editingDate, draft);
+    setEditingDate(null);
+  };
+
+  const cancelDay = () => {
+    if (dayEditResolvedRef.current) return;
+    dayEditResolvedRef.current = true;
     setEditingDate(null);
   };
 
@@ -150,6 +163,7 @@ export function FitView() {
                   onOpen={() => openDay(dateKey)}
                   onDraftChange={setDraft}
                   onSave={saveDay}
+                  onCancel={cancelDay}
                 />
               );
             })}
@@ -234,6 +248,7 @@ function FitDay({
   onOpen,
   onDraftChange,
   onSave,
+  onCancel,
 }: {
   dateKey: string;
   label: string;
@@ -245,6 +260,7 @@ function FitDay({
   onOpen: () => void;
   onDraftChange: (v: string) => void;
   onSave: () => void;
+  onCancel: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `day-${dateKey}` });
 
@@ -281,17 +297,22 @@ function FitDay({
           value={draft}
           onChange={(e) => onDraftChange(e.target.value)}
           onBlur={onSave}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              onSave();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              onCancel();
+            }
+          }}
           placeholder="Workout for this day"
           rows={4}
           className="flex-1 resize-none text-xs"
         />
       ) : (
         <button onClick={onOpen} className="flex-1 rounded text-left">
-          {notes ? (
-            <p className="whitespace-pre-wrap text-xs text-ink-soft">{notes}</p>
-          ) : (
-            <p className="text-xs text-ink-faint/60">Tap to add</p>
-          )}
+          {notes && <p className="whitespace-pre-wrap text-xs font-medium text-ink">{notes}</p>}
         </button>
       )}
     </div>

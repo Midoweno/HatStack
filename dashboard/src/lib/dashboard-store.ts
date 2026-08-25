@@ -50,6 +50,9 @@ function nextOccurrence(task: Task): Task | null {
     completed: false,
     completedAt: undefined,
     createdAt: Date.now(),
+    // Completing a starred recurring task bumps its next occurrence down to
+    // Future — Priority is for what's actively being worked on right now.
+    ...(task.starred ? { starBucket: "future" as const, starOrder: Date.now() } : {}),
   };
 }
 
@@ -297,6 +300,7 @@ interface Store extends DashboardState {
     parentTaskId?: string;
     recurrence?: Recurrence;
     starred?: boolean;
+    starBucket?: "priority" | "future";
   }) => Task;
   updateTask: (id: string, patch: Partial<Omit<Task, "id">>) => void;
   // Returns the id of the next recurring occurrence created, if any, so
@@ -519,9 +523,10 @@ export const useDashboard = create<Store>()((set, get) => ({
       completed: false,
       createdAt: Date.now(),
       starred: input.starred,
-      // Matches toggleStar: newly-starred tasks land in "Future".
+      // Defaults to "Future" (matching toggleStar) unless the caller picked
+      // "priority" explicitly.
       starOrder: input.starred ? Date.now() : undefined,
-      starBucket: input.starred ? "future" : undefined,
+      starBucket: input.starred ? (input.starBucket ?? "future") : undefined,
     };
     set((s) => ({ tasks: [...s.tasks, task] }));
     const userId = get().userId;

@@ -17,7 +17,7 @@ import {
 } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Task } from "@/lib/dashboard-types";
-import { URGENCY_META, URGENCY_ORDER } from "@/lib/dashboard-types";
+import { HATS, URGENCY_META, URGENCY_ORDER } from "@/lib/dashboard-types";
 import { useDashboard } from "@/lib/dashboard-store";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -277,6 +277,7 @@ function CalendarTaskChip({
 }) {
   const toggleTask = useDashboard((s) => s.toggleTask);
   const u = URGENCY_META[task.urgency];
+  const hatLabel = HATS.find((h) => h.id === task.hat)?.label;
 
   if (size === "dot") {
     return (
@@ -309,7 +310,10 @@ function CalendarTaskChip({
           />
         </span>
       )}
-      <span className="truncate">{task.name}</span>
+      <span className="min-w-0 flex-1 truncate">{task.name}</span>
+      {hatLabel && (
+        <span className="shrink-0 text-[10px] uppercase tracking-wide opacity-70">{hatLabel}</span>
+      )}
     </div>
   );
 }

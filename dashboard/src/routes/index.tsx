@@ -2,14 +2,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import { Archive, LogOut, Plus } from "lucide-react";
 import { format } from "date-fns";
-import { HATS, type Hat, type Project, type Task } from "@/lib/dashboard-types";
+import { HATS, URGENCY_META, type Hat, type Project, type Task } from "@/lib/dashboard-types";
 import { useDashboard } from "@/lib/dashboard-store";
 import { useAuth } from "@/lib/use-auth";
 import { supabase } from "@/lib/supabase";
@@ -76,16 +78,42 @@ function Dashboard() {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [openProject, setOpenProject] = useState<Project | null>(null);
   const [view, setView] = useState<ViewMode>("hats");
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+
+  // "N" opens New Task, unless the user is typing somewhere or another
+  // dialog is already up.
+  useEffect(() => {
+    const dialogsOpen = projectDialog.open || taskDialog.open || archiveOpen || !!openProject;
+    if (dialogsOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "n" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement;
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable) {
+        return;
+      }
+      e.preventDefault();
+      setTaskDialog({ open: true });
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [projectDialog.open, taskDialog.open, archiveOpen, openProject]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   );
 
+  const onDragStart = (e: DragStartEvent) => {
+    setActiveTaskId((e.active.data.current?.taskId as string | undefined) ?? null);
+  };
+
   const onDragEnd = (e: DragEndEvent) => {
+    setActiveTaskId(null);
     const taskId = e.active.data.current?.taskId as string | undefined;
     const hat = e.over?.data.current?.hat as Hat | undefined;
     if (taskId && hat) moveTaskToHat(taskId, hat);
   };
+
+  const activeTask = activeTaskId ? tasks.find((t) => t.id === activeTaskId) : null;
 
   const today = useMemo(() => format(new Date(), "EEEE, MMMM d"), []);
 
@@ -154,7 +182,7 @@ function Dashboard() {
 
       <main className="mx-auto max-w-[1600px] px-6 pb-16 sm:px-10">
         {view === "hats" ? (
-          <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+          <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
               {HATS.map((h) => (
                 <HatColumn
@@ -179,6 +207,19 @@ function Dashboard() {
                 />
               ))}
             </div>
+            <DragOverlay>
+              {activeTask && (
+                <div
+                  className={cn(
+                    "flex items-center rounded-full px-3 py-1.5 shadow-lg",
+                    URGENCY_META[activeTask.urgency].dot,
+                    URGENCY_META[activeTask.urgency].pillText,
+                  )}
+                >
+                  <p className="text-sm leading-snug">{activeTask.name}</p>
+                </div>
+              )}
+            </DragOverlay>
           </DndContext>
         ) : view === "priority" ? (
           <PriorityList

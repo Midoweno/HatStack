@@ -80,7 +80,7 @@ export function PriorityList({ tasks, projects, onEditTask }: Props) {
   }, [storeColumns, activeId]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   );
 
   const findColumn = (id: string): Bucket | undefined => {

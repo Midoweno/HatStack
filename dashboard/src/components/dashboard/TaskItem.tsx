@@ -3,10 +3,10 @@ import { useDraggable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { differenceInCalendarDays, isPast, isToday, parseISO } from "date-fns";
-import { MoreHorizontal, Trash2, GripVertical, Star, CheckCircle2, ListPlus, X } from "lucide-react";
+import { MoreHorizontal, Trash2, Star, CheckCircle2, ListPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import type { Project, Task } from "@/lib/dashboard-types";
-import { URGENCY_META } from "@/lib/dashboard-types";
+import { HATS, URGENCY_META } from "@/lib/dashboard-types";
 import { useDashboard } from "@/lib/dashboard-store";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -126,6 +126,7 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
 
   const { due, overdue, label: dueLabel } = dueInfo(task.dueDate);
   const urgent = !task.completed && due !== null && (isToday(due) || overdue);
+  const hatLabel = HATS.find((h) => h.id === task.hat)?.label;
 
   // Guards against submitting twice: pressing Enter fires the form's submit,
   // which unmounts the input, which then fires its own blur — without this,
@@ -165,24 +166,20 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
           ref={setNodeRef}
           style={style}
           onClick={() => onEdit(task)}
+          {...attributes}
+          {...listeners}
           className={cn(
-            "group relative flex cursor-pointer items-center gap-2 rounded-md border border-transparent px-2 py-2 transition-colors hover:border-hairline hover:bg-surface-elevated",
+            "group relative flex cursor-pointer items-center gap-2 rounded-md border border-transparent px-2 py-2 transition-colors hover:border-hairline hover:bg-surface-elevated active:cursor-grabbing",
             urgent && "border-2 border-black hover:border-black",
-            isDragging && (dragMode === "sortable" ? "opacity-0" : "opacity-40"),
+            isDragging && "opacity-0",
             phase === "leaving" && "opacity-0 transition-opacity duration-200",
           )}
         >
-          <button
-            {...attributes}
-            {...listeners}
+          <div
             onClick={(e) => e.stopPropagation()}
-            className="shrink-0 cursor-grab text-ink-faint/50 opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
-            aria-label="Drag task"
+            onPointerDown={(e) => e.stopPropagation()}
+            className="shrink-0"
           >
-            <GripVertical className="h-3.5 w-3.5" />
-          </button>
-
-          <div onClick={(e) => e.stopPropagation()} className="shrink-0">
             {phase === "idle" ? (
               <Checkbox checked={task.completed} onCheckedChange={handleToggle} />
             ) : (
@@ -199,9 +196,16 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
             )}
             aria-label={`${u.label} urgency`}
           >
-            <p className={cn("text-sm leading-snug", task.completed && "line-through")}>
-              {task.name}
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <p className={cn("min-w-0 truncate text-sm leading-snug", task.completed && "line-through")}>
+                {task.name}
+              </p>
+              {hatLabel && (
+                <span className="shrink-0 text-[10px] uppercase tracking-wide opacity-70">
+                  {hatLabel}
+                </span>
+              )}
+            </div>
             {(project || dueLabel) && (
               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] opacity-80">
                 {project && (
@@ -229,6 +233,7 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
               e.stopPropagation();
               toggleStar(task.id);
             }}
+            onPointerDown={(e) => e.stopPropagation()}
             aria-label={task.starred ? "Remove from Priority view" : "Add to Priority view"}
           >
             <Star className={cn("h-3.5 w-3.5", task.starred && "fill-current")} />
@@ -241,6 +246,7 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
                 size="icon"
                 className="h-6 w-6 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                 onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
               >
                 <MoreHorizontal className="h-3.5 w-3.5" />
               </Button>

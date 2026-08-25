@@ -24,7 +24,7 @@ export const URGENCY_META: Record<
     dot: "bg-urgency-critical",
     ring: "ring-urgency-critical/40",
     text: "text-urgency-critical",
-    pillText: "text-white",
+    pillText: "text-black/80",
   },
   high: {
     label: "High",

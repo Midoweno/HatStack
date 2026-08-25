@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { CheckCheck, Star } from "lucide-react";
+import { Check, CheckCheck, Star } from "lucide-react";
 import { useDashboard } from "@/lib/dashboard-store";
 import type { Hat, RecurrenceFreq, Task, Urgency } from "@/lib/dashboard-types";
 import { HATS, URGENCY_META } from "@/lib/dashboard-types";
@@ -48,11 +48,12 @@ export function TaskDialog({
   const projects = useDashboard((s) => s.projects);
 
   const [name, setName] = useState("");
-  const [hat, setHat] = useState<Hat>(defaultHat ?? "routine");
+  const [hat, setHat] = useState<Hat>(defaultHat ?? "work");
   const [urgency, setUrgency] = useState<Urgency>("medium");
   const [dueDate, setDueDate] = useState("");
   const [description, setDescription] = useState("");
   const [starred, setStarred] = useState(false);
+  const [starBucket, setStarBucket] = useState<"priority" | "future">("future");
   const [projectId, setProjectId] = useState<string>(NONE);
   const [repeat, setRepeat] = useState<RecurrenceFreq | "none">("none");
   const [recurrenceInterval, setRecurrenceInterval] = useState(1);
@@ -61,11 +62,12 @@ export function TaskDialog({
   useEffect(() => {
     if (open) {
       setName(task?.name ?? "");
-      setHat(task?.hat ?? defaultHat ?? "routine");
+      setHat(task?.hat ?? defaultHat ?? "work");
       setUrgency(task?.urgency ?? "medium");
       setDueDate(task?.dueDate ?? "");
       setDescription(task?.description ?? "");
       setStarred(task?.starred ?? false);
+      setStarBucket(task?.starBucket ?? "future");
       setProjectId(task?.projectId ?? defaultProjectId ?? NONE);
       setRepeat(task?.recurrence?.freq ?? "none");
       setRecurrenceInterval(task?.recurrence?.interval ?? 1);
@@ -104,16 +106,17 @@ export function TaskDialog({
       starred,
     };
     if (task) {
-      // Matches toggleStar: only newly-starring (not un-starring or leaving
-      // it starred) sends it to "Future" and bumps it to the top of that
-      // column — otherwise an edit shouldn't disturb its existing position.
+      // Only bump starOrder (to the top of its column) when the star state
+      // actually changed — newly starred, or moved to the other column —
+      // so a plain edit doesn't disturb an already-starred task's position.
       const justStarred = starred && !task.starred;
+      const bucketChanged = starred && (task.starBucket ?? "future") !== starBucket;
       updateTask(task.id, {
         ...payload,
-        ...(justStarred ? { starOrder: Date.now(), starBucket: "future" as const } : {}),
+        ...(justStarred || bucketChanged ? { starOrder: Date.now(), starBucket } : {}),
       });
     } else {
-      addTask(payload);
+      addTask({ ...payload, starBucket: starred ? starBucket : undefined });
     }
     onOpenChange(false);
   };
@@ -124,9 +127,30 @@ export function TaskDialog({
     onOpenChange(false);
   };
 
+  // Enter saves (Shift+Enter still makes a newline in the description).
+  // Escape-to-close is handled natively by the Dialog primitive. Buttons
+  // (including the Hat/Project/Repeat selects) are skipped so their own
+  // Enter behavior — opening a dropdown, clicking "Due Today" — isn't
+  // immediately followed by a second, redundant submit.
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter" || e.shiftKey) return;
+    if ((e.target as HTMLElement).tagName === "BUTTON") return;
+    e.preventDefault();
+    submit();
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent onKeyDown={handleKeyDown}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="absolute right-11 top-4 h-7 w-7 text-ink-soft hover:text-ink"
+          onClick={submit}
+          aria-label="Save task"
+        >
+          <Check className="h-4 w-4" />
+        </Button>
         <DialogHeader>
           <DialogTitle>{task ? "Edit task" : "New task"}</DialogTitle>
         </DialogHeader>
@@ -152,6 +176,25 @@ export function TaskDialog({
                 <Star className={cn("h-4 w-4", starred && "fill-current")} />
               </Button>
             </div>
+            {starred && (
+              <div className="mt-2 inline-flex rounded-full border border-hairline bg-surface p-0.5">
+                {(["priority", "future"] as const).map((b) => (
+                  <button
+                    key={b}
+                    type="button"
+                    onClick={() => setStarBucket(b)}
+                    className={cn(
+                      "rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors",
+                      starBucket === b
+                        ? "bg-ink text-background"
+                        : "text-ink-faint hover:text-ink-soft",
+                    )}
+                  >
+                    {b === "priority" ? "Prio" : "Future"}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
