@@ -13,6 +13,7 @@ import type {
   Task,
   Urgency,
   Workout,
+  WorkoutEntry,
 } from "./dashboard-types";
 
 const uid = () =>
@@ -215,7 +216,7 @@ type WorkoutRow = {
   id: string;
   user_id: string;
   date: string;
-  notes: string;
+  entries: WorkoutEntry[];
   created_at: string;
 };
 
@@ -231,7 +232,7 @@ function workoutFromRow(row: WorkoutRow): Workout {
   return {
     id: row.id,
     date: row.date,
-    notes: row.notes,
+    entries: row.entries ?? [],
     createdAt: new Date(row.created_at).getTime(),
   };
 }
@@ -241,7 +242,7 @@ function workoutToRow(userId: string, w: Workout): WorkoutRow {
     id: w.id,
     user_id: userId,
     date: w.date,
-    notes: w.notes,
+    entries: w.entries,
     created_at: new Date(w.createdAt).toISOString(),
   };
 }
@@ -319,9 +320,11 @@ interface Store extends DashboardState {
   // `bucket` along with everyone else's rank.
   setStarredOrder: (bucket: "priority" | "future", orderedIds: string[]) => void;
 
-  // Upserts the free-text workout note for a given real calendar date
-  // (yyyy-MM-dd). Passing empty notes deletes the entry.
-  setWorkoutNote: (date: string, notes: string) => void;
+  // Places a drill from the library onto a day (yyyy-MM-dd). The same drill
+  // can be placed more than once — each placement gets its own entry id.
+  addDrillToDay: (date: string, drillId: string) => void;
+  // Removes one placed entry (not a drill from the library).
+  removeWorkoutEntry: (date: string, entryId: string) => void;
   addDrill: (name: string) => Drill;
   updateDrill: (id: string, name: string) => void;
   deleteDrill: (id: string) => void;
@@ -725,43 +728,61 @@ export const useDashboard = create<Store>()((set, get) => ({
     }
   },
 
-  setWorkoutNote: (date, notes) => {
-    const trimmed = notes.trim();
+  addDrillToDay: (date, drillId) => {
     const existing = get().workouts.find((w) => w.date === date);
     const userId = get().userId;
-
-    if (!trimmed) {
-      if (!existing) return;
-      set((s) => ({ workouts: s.workouts.filter((w) => w.date !== date) }));
-      if (userId) {
-        supabase
-          .from("workouts")
-          .delete()
-          .eq("id", existing.id)
-          .then(({ error }) => error && reportError("clear workout", error));
-      }
-      return;
-    }
+    const entry: WorkoutEntry = { id: uid(), drillId };
 
     if (existing) {
-      const updated = { ...existing, notes: trimmed };
-      set((s) => ({ workouts: s.workouts.map((w) => (w.id === existing.id ? updated : w)) }));
+      const entries = [...existing.entries, entry];
+      set((s) => ({
+        workouts: s.workouts.map((w) => (w.id === existing.id ? { ...w, entries } : w)),
+      }));
       if (userId) {
         supabase
           .from("workouts")
-          .update({ notes: trimmed })
+          .update({ entries })
           .eq("id", existing.id)
-          .then(({ error }) => error && reportError("save workout", error));
+          .then(({ error }) => error && reportError("add drill", error));
       }
     } else {
-      const workout: Workout = { id: uid(), date, notes: trimmed, createdAt: Date.now() };
+      const workout: Workout = { id: uid(), date, entries: [entry], createdAt: Date.now() };
       set((s) => ({ workouts: [...s.workouts, workout] }));
       if (userId) {
         supabase
           .from("workouts")
           .insert(workoutToRow(userId, workout))
-          .then(({ error }) => error && reportError("save workout", error));
+          .then(({ error }) => error && reportError("add drill", error));
       }
+    }
+  },
+  removeWorkoutEntry: (date, entryId) => {
+    const existing = get().workouts.find((w) => w.date === date);
+    if (!existing) return;
+    const entries = existing.entries.filter((e) => e.id !== entryId);
+    const userId = get().userId;
+
+    if (entries.length === 0) {
+      set((s) => ({ workouts: s.workouts.filter((w) => w.id !== existing.id) }));
+      if (userId) {
+        supabase
+          .from("workouts")
+          .delete()
+          .eq("id", existing.id)
+          .then(({ error }) => error && reportError("remove drill", error));
+      }
+      return;
+    }
+
+    set((s) => ({
+      workouts: s.workouts.map((w) => (w.id === existing.id ? { ...w, entries } : w)),
+    }));
+    if (userId) {
+      supabase
+        .from("workouts")
+        .update({ entries })
+        .eq("id", existing.id)
+        .then(({ error }) => error && reportError("remove drill", error));
     }
   },
   addDrill: (name) => {

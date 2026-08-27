@@ -29,6 +29,13 @@ import { ProjectTasksDialog } from "@/components/dashboard/ProjectTasksDialog";
 
 type ViewMode = "hats" | "priority" | "fit" | "calendar";
 
+const VIEWS: { id: ViewMode; label: string }[] = [
+  { id: "hats", label: "Hats" },
+  { id: "priority", label: "Priority" },
+  { id: "fit", label: "FIT" },
+  { id: "calendar", label: "Calendar" },
+];
+
 export const Route = createFileRoute("/")({
   component: IndexRoute,
 });
@@ -77,26 +84,34 @@ function Dashboard() {
   }>({ open: false });
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [openProject, setOpenProject] = useState<Project | null>(null);
-  const [view, setView] = useState<ViewMode>("hats");
+  const [view, setView] = useState<ViewMode>("priority");
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
 
-  // "N" opens New Task, unless the user is typing somewhere or another
-  // dialog is already up.
+  // "N" opens New Task, and Left/Right arrows cycle the view tabs — unless
+  // the user is typing somewhere (including navigating a date input's
+  // segments with the arrow keys) or another dialog is already up.
   useEffect(() => {
     const dialogsOpen = projectDialog.open || taskDialog.open || archiveOpen || !!openProject;
     if (dialogsOpen) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== "n" || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target as HTMLElement;
       if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable) {
         return;
       }
-      e.preventDefault();
-      setTaskDialog({ open: true });
+      if (e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        setTaskDialog({ open: true });
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        const idx = VIEWS.findIndex((v) => v.id === view);
+        const delta = e.key === "ArrowRight" ? 1 : -1;
+        setView(VIEWS[(idx + delta + VIEWS.length) % VIEWS.length].id);
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [projectDialog.open, taskDialog.open, archiveOpen, openProject]);
+  }, [projectDialog.open, taskDialog.open, archiveOpen, openProject, view]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
@@ -126,15 +141,10 @@ function Dashboard() {
               {today}
             </p>
             <h1 className="mt-1 font-display text-4xl text-ink sm:text-5xl">
-              What are we doing today?
+              What's on the agenda?
             </h1>
             <div className="mt-3 inline-flex rounded-full border border-hairline bg-surface p-0.5">
-              {([
-                { id: "hats", label: "Hats" },
-                { id: "priority", label: "Priority" },
-                { id: "fit", label: "FIT" },
-                { id: "calendar", label: "Calendar" },
-              ] as const).map((v) => (
+              {VIEWS.map((v) => (
                 <button
                   key={v.id}
                   onClick={() => setView(v.id)}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { format } from "date-fns";
-import { Check, CheckCheck, Star } from "lucide-react";
+import { addDays, format, parseISO } from "date-fns";
+import { Check, CheckCheck, ChevronDown, Minus, Plus, Star } from "lucide-react";
 import { useDashboard } from "@/lib/dashboard-store";
 import type { Hat, RecurrenceFreq, Task, Urgency } from "@/lib/dashboard-types";
 import { HATS, URGENCY_META } from "@/lib/dashboard-types";
@@ -34,6 +34,59 @@ interface Props {
 
 const NONE = "__none__";
 const URGENCIES: Urgency[] = ["critical", "high", "medium", "low"];
+
+// Styled like the Select trigger it replaces, but opens on hover — move the
+// cursor down into the list and click to confirm — with tap-to-open/
+// tap-to-pick as the touch fallback.
+function HoverSelect<T extends string>({
+  value,
+  options,
+  onSelect,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onSelect: (v: T) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = options.find((o) => o.value === value);
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+      >
+        <span className="truncate">{current?.label}</span>
+        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-50 max-h-60 w-full overflow-auto rounded-md border border-hairline bg-surface-elevated py-1 text-ink shadow-lg">
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => {
+                onSelect(opt.value);
+                setOpen(false);
+              }}
+              className={cn(
+                "block w-full truncate px-3 py-1.5 text-left text-sm hover:bg-accent",
+                opt.value === value && "font-semibold",
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function TaskDialog({
   open,
@@ -127,14 +180,24 @@ export function TaskDialog({
     onOpenChange(false);
   };
 
-  // Enter saves (Shift+Enter still makes a newline in the description).
-  // Escape-to-close is handled natively by the Dialog primitive. Buttons
-  // (including the Hat/Project/Repeat selects) are skipped so their own
-  // Enter behavior — opening a dropdown, clicking "Due Today" — isn't
-  // immediately followed by a second, redundant submit.
+  // Quickly push a due date forward or back a day — for "kicking the can
+  // down the road" on something that isn't quite done yet.
+  const shiftDueDate = (deltaDays: number) => {
+    const base = dueDate ? parseISO(dueDate) : new Date();
+    setDueDate(format(addDays(base, deltaDays), "yyyy-MM-dd"));
+  };
+
+  // Enter saves no matter what's focused — clicking a button like "Prio" or
+  // an urgency pill leaves focus sitting on it, and Enter should still save
+  // from there (Shift+Enter still makes a newline in the description).
+  // Escape-to-close (discarding changes) is handled natively by the Dialog
+  // primitive. The one exception is a closed Select trigger (Hat/Project/
+  // Repeat, role="combobox"), where Enter should open its dropdown instead —
+  // Radix's own listbox is portaled outside this element once open, so this
+  // check never intercepts picking an option, only the trigger itself.
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key !== "Enter" || e.shiftKey) return;
-    if ((e.target as HTMLElement).tagName === "BUTTON") return;
+    if ((e.target as HTMLElement).getAttribute("role") === "combobox") return;
     e.preventDefault();
     submit();
   };
@@ -200,35 +263,25 @@ export function TaskDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Hat</Label>
-              <Select value={hat} onValueChange={(v) => setHat(v as Hat)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {HATS.map((h) => (
-                    <SelectItem key={h.id} value={h.id}>
-                      {h.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <HoverSelect
+                value={hat}
+                options={HATS.map((h) => ({ value: h.id, label: h.label }))}
+                onSelect={setHat}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Project</Label>
-              <Select value={projectId} onValueChange={setProjectId}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE}>Standalone</SelectItem>
-                  {availableProjects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.icon ? `${p.icon} ` : ""}
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <HoverSelect
+                value={projectId}
+                options={[
+                  { value: NONE, label: "Standalone" },
+                  ...availableProjects.map((p) => ({
+                    value: p.id,
+                    label: p.icon ? `${p.icon} ${p.name}` : p.name,
+                  })),
+                ]}
+                onSelect={setProjectId}
+              />
             </div>
           </div>
 
@@ -258,16 +311,39 @@ export function TaskDialog({
 
           <div className="space-y-1.5">
             <Label>Due date</Label>
-            <div className="flex gap-2">
-              <Input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-              />
+            <div className="space-y-2">
+              <div className="flex items-center justify-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  onClick={() => shiftDueDate(-1)}
+                  aria-label="Push due date back a day"
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <Input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="w-auto shrink-0"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  onClick={() => shiftDueDate(1)}
+                  aria-label="Push due date forward a day"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
               <Button
                 type="button"
                 variant="outline"
-                className="shrink-0"
+                className="w-full"
                 onClick={() => setDueDate(format(new Date(), "yyyy-MM-dd"))}
               >
                 Due Today

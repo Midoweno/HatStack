@@ -95,16 +95,26 @@ export interface Task {
   starBucket?: "priority" | "future";
 }
 
-// One free-text workout note per real calendar date (not "day of week") so
-// history stays put as you navigate to past/future weeks in the FIT view.
+// One entry per drill placed on a day. Slots aren't free text — every entry
+// must reference a drill that exists in the library. `id` is unique per
+// placement (not per drill) so the same drill can be placed more than once
+// on a day and each occurrence can be removed independently.
+export interface WorkoutEntry {
+  id: string;
+  drillId: string;
+}
+
+// A day's placed drills, keyed to a real calendar date (not "day of week")
+// so history stays put as you navigate to past/future weeks in the FIT view.
 export interface Workout {
   id: string;
   date: string; // ISO date, yyyy-MM-dd
-  notes: string;
+  entries: WorkoutEntry[];
   createdAt: number;
 }
 
-// A reusable named entry in the FIT drill library, draggable into a day.
+// A reusable named entry in the FIT drill library, picked into a day via the
+// hover menu.
 export interface Drill {
   id: string;
   name: string;

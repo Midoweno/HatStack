@@ -1,22 +1,20 @@
-import { useMemo, useRef, useState } from "react";
+import { useState } from "react";
 import { addDays, addWeeks, format, isToday, startOfWeek } from "date-fns";
 import {
   DndContext,
   PointerSensor,
   closestCenter,
-  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronLeft, ChevronRight, Dumbbell, GripVertical, Pencil, Plus, X } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Circle, Dumbbell, GripVertical, Pencil, Plus, X } from "lucide-react";
 import { useDashboard } from "@/lib/dashboard-store";
-import type { Drill } from "@/lib/dashboard-types";
+import type { Drill, Workout } from "@/lib/dashboard-types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -24,77 +22,47 @@ const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export function FitView() {
   const workouts = useDashboard((s) => s.workouts);
   const drills = useDashboard((s) => s.drills);
-  const setWorkoutNote = useDashboard((s) => s.setWorkoutNote);
+  const addDrillToDay = useDashboard((s) => s.addDrillToDay);
+  const removeWorkoutEntry = useDashboard((s) => s.removeWorkoutEntry);
   const addDrill = useDashboard((s) => s.addDrill);
   const updateDrill = useDashboard((s) => s.updateDrill);
   const deleteDrill = useDashboard((s) => s.deleteDrill);
   const reorderDrills = useDashboard((s) => s.reorderDrills);
 
   const [weekOffset, setWeekOffset] = useState(0);
-  const [editingDate, setEditingDate] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
   const [newDrillName, setNewDrillName] = useState("");
   const [editingDrillId, setEditingDrillId] = useState<string | null>(null);
   const [editingDrillName, setEditingDrillName] = useState("");
 
-  const weekStart = useMemo(
-    () => startOfWeek(addWeeks(new Date(), weekOffset), { weekStartsOn: 0 }),
-    [weekOffset],
-  );
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
+  const weekStart = startOfWeek(addWeeks(new Date(), weekOffset), { weekStartsOn: 0 });
+  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const weekEnd = days[6];
 
   const workoutByDate = new Map(workouts.map((w) => [w.date, w]));
+  const drillById = new Map(drills.map((d) => [d.id, d]));
   const sortedDrills = [...drills].sort((a, b) => a.position - b.position);
+
+  // Which drills have been placed on at least one day in the week currently
+  // being viewed — the library shows a check next to each one, so it's easy
+  // to see which are still missing for the week.
+  const drillsDoneThisWeek = new Set<string>();
+  for (const day of days) {
+    const w = workoutByDate.get(format(day, "yyyy-MM-dd"));
+    w?.entries.forEach((e) => drillsDoneThisWeek.add(e.drillId));
+  }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  // Guards against double-firing: Enter (or the blur that follows closing
-  // the field) can both try to resolve the same edit.
-  const dayEditResolvedRef = useRef(false);
-
-  const openDay = (dateKey: string) => {
-    dayEditResolvedRef.current = false;
-    setEditingDate(dateKey);
-    setDraft(workoutByDate.get(dateKey)?.notes ?? "");
-  };
-
-  const saveDay = () => {
-    if (dayEditResolvedRef.current) return;
-    dayEditResolvedRef.current = true;
-    if (editingDate) setWorkoutNote(editingDate, draft);
-    setEditingDate(null);
-  };
-
-  const cancelDay = () => {
-    if (dayEditResolvedRef.current) return;
-    dayEditResolvedRef.current = true;
-    setEditingDate(null);
-  };
-
+  // The library's own drag-to-reorder — placing drills onto days is a
+  // separate hover-and-click picker (see FitDay), not drag-and-drop.
   const onDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
-    if (!over) return;
-    const activeId = String(active.id);
-    const overId = String(over.id);
-    if (activeId === overId) return;
-
-    if (overId.startsWith("day-")) {
-      const drillName = active.data.current?.name as string | undefined;
-      if (!drillName) return;
-      const dateKey = overId.slice(4);
-      const existing = workoutByDate.get(dateKey)?.notes ?? "";
-      setWorkoutNote(dateKey, existing ? `${existing}\n${drillName}` : drillName);
-      return;
-    }
-
-    if (activeId.startsWith("drill-") && overId.startsWith("drill-")) {
-      const ids = sortedDrills.map((d) => `drill-${d.id}`);
-      const oldIndex = ids.indexOf(activeId);
-      const newIndex = ids.indexOf(overId);
-      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
-      reorderDrills(arrayMove(ids, oldIndex, newIndex).map((id) => id.slice(6)));
-    }
+    if (!over || active.id === over.id) return;
+    const ids = sortedDrills.map((d) => d.id);
+    const oldIndex = ids.indexOf(String(active.id));
+    const newIndex = ids.indexOf(String(over.id));
+    if (oldIndex === -1 || newIndex === -1) return;
+    reorderDrills(arrayMove(ids, oldIndex, newIndex));
   };
 
   const submitNewDrill = () => {
@@ -115,75 +83,69 @@ export function FitView() {
   };
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_260px]">
-        <div className="rounded-2xl border border-hairline-strong bg-surface">
-          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline px-5 pt-5 pb-4">
-            <h2 className="font-display text-2xl text-ink">
-              {format(weekStart, "MMM d")} – {format(weekEnd, "MMM d, yyyy")}
-            </h2>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setWeekOffset((w) => w - 1)}
-                aria-label="Previous week"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              {weekOffset !== 0 && (
-                <Button variant="ghost" size="sm" onClick={() => setWeekOffset(0)}>
-                  This week
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setWeekOffset((w) => w + 1)}
-                aria-label="Next week"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </header>
-
-          <div className="grid grid-cols-1 divide-y divide-hairline sm:grid-cols-7 sm:divide-x sm:divide-y-0">
-            {days.map((day, i) => {
-              const dateKey = format(day, "yyyy-MM-dd");
-              return (
-                <FitDay
-                  key={dateKey}
-                  dateKey={dateKey}
-                  label={WEEKDAY_LABELS[i]}
-                  dayNumber={format(day, "d")}
-                  today={isToday(day)}
-                  notes={workoutByDate.get(dateKey)?.notes}
-                  editing={editingDate === dateKey}
-                  draft={draft}
-                  onOpen={() => openDay(dateKey)}
-                  onDraftChange={setDraft}
-                  onSave={saveDay}
-                  onCancel={cancelDay}
-                />
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-hairline-strong bg-surface p-4">
-          <h3 className="mb-3 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-            <Dumbbell className="h-3 w-3" /> Drill library
-          </h3>
-
-          {sortedDrills.length === 0 ? (
-            <p className="mb-3 text-xs text-ink-faint">
-              Add drills here, then drag them into a day.
-            </p>
-          ) : (
-            <SortableContext
-              items={sortedDrills.map((d) => `drill-${d.id}`)}
-              strategy={verticalListSortingStrategy}
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_260px]">
+      <div className="rounded-2xl border border-hairline-strong bg-surface">
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-hairline px-5 pt-5 pb-4">
+          <h2 className="font-display text-2xl text-ink">
+            {format(weekStart, "MMM d")} – {format(weekEnd, "MMM d, yyyy")}
+          </h2>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setWeekOffset((w) => w - 1)}
+              aria-label="Previous week"
             >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            {weekOffset !== 0 && (
+              <Button variant="ghost" size="sm" onClick={() => setWeekOffset(0)}>
+                This week
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setWeekOffset((w) => w + 1)}
+              aria-label="Next week"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 divide-y divide-hairline sm:grid-cols-7 sm:divide-x sm:divide-y-0">
+          {days.map((day, i) => {
+            const dateKey = format(day, "yyyy-MM-dd");
+            return (
+              <FitDay
+                key={dateKey}
+                label={WEEKDAY_LABELS[i]}
+                dayNumber={format(day, "d")}
+                today={isToday(day)}
+                workout={workoutByDate.get(dateKey)}
+                drills={sortedDrills}
+                drillById={drillById}
+                onAddDrill={(drillId) => addDrillToDay(dateKey, drillId)}
+                onRemoveEntry={(entryId) => removeWorkoutEntry(dateKey, entryId)}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-hairline-strong bg-surface p-4">
+        <h3 className="mb-3 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+          <Dumbbell className="h-3 w-3" /> Drill library
+        </h3>
+
+        {sortedDrills.length === 0 ? (
+          <p className="mb-3 text-xs text-ink-faint">
+            Add drills here, then hover a day to pick from them.
+          </p>
+        ) : (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+            <SortableContext items={sortedDrills.map((d) => d.id)} strategy={verticalListSortingStrategy}>
               <div className="mb-3 space-y-0.5">
                 {sortedDrills.map((drill) =>
                   editingDrillId === drill.id ? (
@@ -205,6 +167,7 @@ export function FitView() {
                     <DrillItem
                       key={drill.id}
                       drill={drill}
+                      doneThisWeek={drillsDoneThisWeek.has(drill.id)}
                       onStartEdit={() => startEditDrill(drill)}
                       onDelete={() => deleteDrill(drill.id)}
                     />
@@ -212,65 +175,59 @@ export function FitView() {
                 )}
               </div>
             </SortableContext>
-          )}
+          </DndContext>
+        )}
 
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              submitNewDrill();
-            }}
-            className="flex gap-1.5"
-          >
-            <Input
-              value={newDrillName}
-              onChange={(e) => setNewDrillName(e.target.value)}
-              placeholder="New drill"
-              className="h-8 text-xs"
-            />
-            <Button type="submit" size="icon" variant="outline" className="h-8 w-8 shrink-0">
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          </form>
-        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submitNewDrill();
+          }}
+          className="flex gap-1.5"
+        >
+          <Input
+            value={newDrillName}
+            onChange={(e) => setNewDrillName(e.target.value)}
+            placeholder="New drill"
+            className="h-8 text-xs"
+          />
+          <Button type="submit" size="icon" variant="outline" className="h-8 w-8 shrink-0">
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </form>
       </div>
-    </DndContext>
+    </div>
   );
 }
 
 function FitDay({
-  dateKey,
   label,
   dayNumber,
   today,
-  notes,
-  editing,
-  draft,
-  onOpen,
-  onDraftChange,
-  onSave,
-  onCancel,
+  workout,
+  drills,
+  drillById,
+  onAddDrill,
+  onRemoveEntry,
 }: {
-  dateKey: string;
   label: string;
   dayNumber: string;
   today: boolean;
-  notes: string | undefined;
-  editing: boolean;
-  draft: string;
-  onOpen: () => void;
-  onDraftChange: (v: string) => void;
-  onSave: () => void;
-  onCancel: () => void;
+  workout: Workout | undefined;
+  drills: Drill[];
+  drillById: Map<string, Drill>;
+  onAddDrill: (drillId: string) => void;
+  onRemoveEntry: (entryId: string) => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `day-${dateKey}` });
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const entries = workout?.entries ?? [];
 
   return (
     <div
-      ref={setNodeRef}
-      className={cn(
-        "flex min-h-[130px] flex-col gap-1.5 p-3 transition-colors",
-        isOver && "bg-accent/40",
-      )}
+      className="flex min-h-[130px] flex-col gap-1.5 p-3 transition-colors"
+      onMouseEnter={() => setPickerOpen(true)}
+      onMouseLeave={() => setPickerOpen(false)}
+      onClick={() => setPickerOpen((v) => !v)}
     >
       <div className="flex items-center justify-between">
         <span
@@ -291,29 +248,56 @@ function FitDay({
         </span>
       </div>
 
-      {editing ? (
-        <Textarea
-          autoFocus
-          value={draft}
-          onChange={(e) => onDraftChange(e.target.value)}
-          onBlur={onSave}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              onSave();
-            } else if (e.key === "Escape") {
-              e.preventDefault();
-              onCancel();
-            }
-          }}
-          placeholder="Workout for this day"
-          rows={4}
-          className="flex-1 resize-none text-xs"
-        />
-      ) : (
-        <button onClick={onOpen} className="flex-1 rounded text-left">
-          {notes && <p className="whitespace-pre-wrap text-xs font-medium text-ink">{notes}</p>}
-        </button>
+      {entries.length > 0 && (
+        <div className="space-y-1">
+          {entries.map((entry) => {
+            const drill = drillById.get(entry.drillId);
+            if (!drill) return null;
+            return (
+              <div
+                key={entry.id}
+                className="group/entry flex items-center justify-between gap-1 rounded bg-surface-elevated px-1.5 py-1 text-xs"
+              >
+                <span className="truncate font-medium text-ink">{drill.name}</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveEntry(entry.id);
+                  }}
+                  className="shrink-0 text-ink-faint/50 opacity-0 transition-opacity hover:text-destructive group-hover/entry:opacity-100"
+                  aria-label="Remove"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {pickerOpen && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="max-h-32 overflow-y-auto rounded-md border border-hairline bg-surface-elevated py-1 shadow-sm"
+        >
+          {drills.length === 0 ? (
+            <p className="px-2 py-1.5 text-[10px] text-ink-faint">Add a drill to the library first</p>
+          ) : (
+            drills.map((d) => (
+              <button
+                key={d.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddDrill(d.id);
+                  setPickerOpen(false);
+                }}
+                className="block w-full truncate px-2 py-1 text-left text-[11px] hover:bg-accent"
+              >
+                {d.name}
+              </button>
+            ))
+          )}
+        </div>
       )}
     </div>
   );
@@ -321,16 +305,17 @@ function FitDay({
 
 function DrillItem({
   drill,
+  doneThisWeek,
   onStartEdit,
   onDelete,
 }: {
   drill: Drill;
+  doneThisWeek: boolean;
   onStartEdit: () => void;
   onDelete: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: `drill-${drill.id}`,
-    data: { name: drill.name },
+    id: drill.id,
   });
   const style = { transform: CSS.Transform.toString(transform), transition };
 
@@ -351,6 +336,14 @@ function DrillItem({
       >
         <GripVertical className="h-3.5 w-3.5" />
       </button>
+      {doneThisWeek ? (
+        <CheckCircle2
+          className="h-4 w-4 shrink-0 text-green-500"
+          aria-label="Placed at least once this week"
+        />
+      ) : (
+        <Circle className="h-4 w-4 shrink-0 text-ink-faint/25" aria-label="Not placed this week yet" />
+      )}
       <span className="flex-1 truncate">{drill.name}</span>
       <button
         onClick={onStartEdit}

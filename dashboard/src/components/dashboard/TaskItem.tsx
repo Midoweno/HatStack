@@ -44,7 +44,7 @@ function dueInfo(dueDate: string | undefined) {
       : (() => {
           const days = Math.abs(differenceInCalendarDays(due, new Date()));
           const unit = days === 1 ? "day" : "days";
-          return overdue ? `${days} ${unit} overdue` : `${days} ${unit}`;
+          return overdue ? `${days} ${unit} overdue` : `In ${days} ${unit}`;
         })()
     : null;
   return { due, overdue, label };
@@ -158,10 +158,10 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
 
   return (
     <div
-      className="grid transition-[grid-template-rows] duration-300 ease-in"
+      className="grid min-w-0 transition-[grid-template-rows] duration-300 ease-in"
       style={{ gridTemplateRows: phase === "leaving" ? "0fr" : "1fr" }}
     >
-      <div className={phase === "leaving" ? "overflow-hidden" : "overflow-visible"}>
+      <div className={cn("min-w-0", phase === "leaving" ? "overflow-hidden" : "overflow-visible")}>
         <div
           ref={setNodeRef}
           style={style}
@@ -169,7 +169,7 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
           {...attributes}
           {...listeners}
           className={cn(
-            "group relative flex cursor-pointer items-center gap-2 rounded-md border border-transparent px-2 py-2 transition-colors hover:border-hairline hover:bg-surface-elevated active:cursor-grabbing",
+            "group relative flex min-w-0 cursor-pointer items-center gap-2 rounded-md border border-transparent px-2 py-2 transition-colors hover:border-hairline hover:bg-surface-elevated active:cursor-grabbing",
             urgent && "border-2 border-black hover:border-black",
             isDragging && "opacity-0",
             phase === "leaving" && "opacity-0 transition-opacity duration-200",
@@ -196,8 +196,8 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
             )}
             aria-label={`${u.label} urgency`}
           >
-            <div className="flex items-center justify-between gap-2">
-              <p className={cn("min-w-0 truncate text-sm leading-snug", task.completed && "line-through")}>
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <p className={cn("min-w-0 flex-1 truncate text-sm leading-snug", task.completed && "line-through")}>
                 {task.name}
               </p>
               {hatLabel && (

@@ -51,7 +51,7 @@ export function HatColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex min-h-[70vh] flex-col rounded-2xl border border-hairline-strong bg-surface transition-colors",
+        "flex min-h-[70vh] min-w-0 flex-col rounded-2xl border border-hairline-strong bg-surface transition-colors",
         isOver && "border-ink/30 bg-accent/40",
       )}
     >

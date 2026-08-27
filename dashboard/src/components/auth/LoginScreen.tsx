@@ -27,7 +27,7 @@ export function LoginScreen() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm text-center">
-        <h1 className="font-display text-3xl text-ink">What are we doing today?</h1>
+        <h1 className="font-display text-3xl text-ink">What's on the agenda?</h1>
         <p className="mt-2 text-sm text-ink-soft">
           Sign in to see your hats, projects, and tasks.
         </p>
