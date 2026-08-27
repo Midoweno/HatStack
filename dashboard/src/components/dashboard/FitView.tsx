@@ -221,10 +221,14 @@ function FitDay({
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const entries = workout?.entries ?? [];
+  const hasEntries = entries.length > 0;
 
   return (
     <div
-      className="flex min-h-[130px] flex-col gap-1.5 p-3 transition-colors"
+      className={cn(
+        "flex min-h-[130px] flex-col gap-1.5 p-3 transition-colors",
+        hasEntries && "shadow-[inset_3px_0_0_0_#22c55e]",
+      )}
       onMouseEnter={() => setPickerOpen(true)}
       onMouseLeave={() => setPickerOpen(false)}
       onClick={() => setPickerOpen((v) => !v)}
@@ -233,22 +237,22 @@ function FitDay({
         <span
           className={cn(
             "text-[10px] font-semibold uppercase tracking-[0.1em]",
-            today ? "rounded-full bg-ink px-2 py-0.5 text-background" : "text-ink-faint",
+            today ? "rounded-full bg-ink px-2 py-0.5 text-background" : "text-ink-soft",
           )}
         >
           {label}
         </span>
         <span
           className={cn(
-            "text-xs tabular-nums",
-            today ? "rounded-full bg-ink px-2 py-0.5 font-semibold text-background" : "text-ink-faint",
+            "text-xs font-semibold tabular-nums",
+            today ? "rounded-full bg-ink px-2 py-0.5 text-background" : "text-ink",
           )}
         >
           {dayNumber}
         </span>
       </div>
 
-      {entries.length > 0 && (
+      {entries.length > 0 ? (
         <div className="space-y-1">
           {entries.map((entry) => {
             const drill = drillById.get(entry.drillId);
@@ -256,15 +260,15 @@ function FitDay({
             return (
               <div
                 key={entry.id}
-                className="group/entry flex items-center justify-between gap-1 rounded bg-surface-elevated px-1.5 py-1 text-xs"
+                className="group/entry flex items-center justify-between gap-1 rounded-md border border-green-200 bg-green-50 px-1.5 py-1 text-xs"
               >
-                <span className="truncate font-medium text-ink">{drill.name}</span>
+                <span className="truncate font-semibold text-green-700">{drill.name}</span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     onRemoveEntry(entry.id);
                   }}
-                  className="shrink-0 text-ink-faint/50 opacity-0 transition-opacity hover:text-destructive group-hover/entry:opacity-100"
+                  className="shrink-0 text-green-700/40 opacity-0 transition-opacity hover:text-destructive group-hover/entry:opacity-100"
                   aria-label="Remove"
                 >
                   <X className="h-3 w-3" />
@@ -273,6 +277,12 @@ function FitDay({
             );
           })}
         </div>
+      ) : (
+        !pickerOpen && (
+          <div className="flex flex-1 items-center justify-center">
+            <Dumbbell className="h-4 w-4 text-ink-faint/25" />
+          </div>
+        )
       )}
 
       {pickerOpen && (

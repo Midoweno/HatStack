@@ -3,9 +3,9 @@ export type Hat = "routine" | "work" | "personal";
 export type Urgency = "critical" | "high" | "medium" | "low";
 
 export const HATS: { id: Hat; label: string }[] = [
-  { id: "routine", label: "Routine" },
   { id: "work", label: "Work" },
   { id: "personal", label: "Personal" },
+  { id: "routine", label: "Routine" },
 ];
 
 export const URGENCY_ORDER: Record<Urgency, number> = {
