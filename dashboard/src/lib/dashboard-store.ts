@@ -92,6 +92,7 @@ type TaskRow = {
   starred: boolean;
   star_order: number | null;
   star_bucket: "priority" | "future" | null;
+  pinned: boolean;
 };
 
 function projectFromRow(row: ProjectRow): Project {
@@ -160,6 +161,7 @@ function taskFromRow(row: TaskRow): Task {
     starred: row.starred,
     starOrder: row.star_order ?? undefined,
     starBucket: row.star_bucket ?? undefined,
+    pinned: row.pinned,
   };
 }
 
@@ -184,6 +186,7 @@ function taskToRow(userId: string, t: Task): TaskRow {
     starred: t.starred ?? false,
     star_order: t.starOrder ?? null,
     star_bucket: t.starBucket ?? null,
+    pinned: t.pinned ?? false,
   };
 }
 
@@ -209,6 +212,7 @@ function taskPatchToRow(patch: Partial<Omit<Task, "id">>) {
   if ("starred" in patch) row.starred = patch.starred ?? false;
   if ("starOrder" in patch) row.star_order = patch.starOrder ?? null;
   if ("starBucket" in patch) row.star_bucket = patch.starBucket ?? null;
+  if ("pinned" in patch) row.pinned = patch.pinned ?? false;
   return row;
 }
 
@@ -319,6 +323,11 @@ interface Store extends DashboardState {
   // moved task if this is a cross-column move — its starBucket is set to
   // `bucket` along with everyone else's rank.
   setStarredOrder: (bucket: "priority" | "future", orderedIds: string[]) => void;
+
+  // Pins this task as the single "current task" shown above Priority/Future;
+  // pinning one unpins whichever task was previously pinned. Calling it on
+  // the already-pinned task unpins it.
+  togglePin: (id: string) => void;
 
   // Places a drill from the library onto a day (yyyy-MM-dd). The same drill
   // can be placed more than once — each placement gets its own entry id.
@@ -706,6 +715,40 @@ export const useDashboard = create<Store>()((set, get) => ({
         .update(taskPatchToRow(patch))
         .eq("id", id)
         .then(({ error }) => error && reportError("star task", error));
+    }
+  },
+  togglePin: (id) => {
+    let nowPinned = false;
+    let previousPinnedId: string | undefined;
+    set((s) => {
+      const target = s.tasks.find((t) => t.id === id);
+      if (!target) return s;
+      nowPinned = !target.pinned;
+      previousPinnedId = nowPinned
+        ? s.tasks.find((t) => t.pinned && t.id !== id)?.id
+        : undefined;
+      return {
+        tasks: s.tasks.map((t) => {
+          if (t.id === id) return { ...t, pinned: nowPinned };
+          if (nowPinned && t.pinned) return { ...t, pinned: false };
+          return t;
+        }),
+      };
+    });
+    const userId = get().userId;
+    if (userId) {
+      supabase
+        .from("tasks")
+        .update(taskPatchToRow({ pinned: nowPinned }))
+        .eq("id", id)
+        .then(({ error }) => error && reportError("pin task", error));
+      if (previousPinnedId) {
+        supabase
+          .from("tasks")
+          .update(taskPatchToRow({ pinned: false }))
+          .eq("id", previousPinnedId)
+          .then(({ error }) => error && reportError("unpin task", error));
+      }
     }
   },
   setStarredOrder: (bucket, orderedIds) => {

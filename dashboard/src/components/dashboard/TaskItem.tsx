@@ -3,7 +3,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { differenceInCalendarDays, isPast, isToday, parseISO } from "date-fns";
-import { MoreHorizontal, Trash2, Star, CheckCircle2, ListPlus, X } from "lucide-react";
+import { MoreHorizontal, Trash2, Star, Pin, CheckCircle2, ListPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import type { Project, Task } from "@/lib/dashboard-types";
 import { HATS, URGENCY_META } from "@/lib/dashboard-types";
@@ -30,6 +30,9 @@ interface Props {
   // which shows completed tasks with a strikethrough) instead of playing
   // the collapse-and-disappear animation.
   keepOnComplete?: boolean;
+  // Renders ~25% bigger (Priority view only) — real sizing, not a CSS
+  // zoom/transform, so dnd-kit's pointer math stays accurate while dragging.
+  large?: boolean;
 }
 
 const COMPLETE_ANIMATION_MS = 450;
@@ -50,11 +53,19 @@ function dueInfo(dueDate: string | undefined) {
   return { due, overdue, label };
 }
 
-export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComplete = false }: Props) {
+export function TaskItem({
+  task,
+  project,
+  onEdit,
+  dragMode = "hat",
+  keepOnComplete = false,
+  large = false,
+}: Props) {
   const toggleTask = useDashboard((s) => s.toggleTask);
   const updateTask = useDashboard((s) => s.updateTask);
   const deleteTask = useDashboard((s) => s.deleteTask);
   const toggleStar = useDashboard((s) => s.toggleStar);
+  const togglePin = useDashboard((s) => s.togglePin);
   const addTask = useDashboard((s) => s.addTask);
   const allTasks = useDashboard((s) => s.tasks);
   const u = URGENCY_META[task.urgency];
@@ -69,6 +80,8 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
   const [subtaskName, setSubtaskName] = useState("");
   const [subtaskDueDate, setSubtaskDueDate] = useState("");
   const [editingSubtaskDue, setEditingSubtaskDue] = useState<string | null>(null);
+  const [editingSubtaskName, setEditingSubtaskName] = useState<string | null>(null);
+  const [subtaskNameDraft, setSubtaskNameDraft] = useState("");
 
   const commitComplete = () => {
     toggleTask(task.id);
@@ -138,6 +151,31 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
     setAddingSubtask(true);
   };
 
+  const startEditSubtaskName = (st: Task) => {
+    setEditingSubtaskName(st.id);
+    setSubtaskNameDraft(st.name);
+  };
+
+  // Escape sets this so the blur that follows (closing the input) doesn't
+  // also commit the draft text — Escape means discard, not save.
+  const cancelingSubtaskNameRef = useRef(false);
+
+  const commitSubtaskName = (id: string) => {
+    if (cancelingSubtaskNameRef.current) {
+      cancelingSubtaskNameRef.current = false;
+      setEditingSubtaskName(null);
+      return;
+    }
+    const trimmed = subtaskNameDraft.trim();
+    if (trimmed) updateTask(id, { name: trimmed });
+    setEditingSubtaskName(null);
+  };
+
+  const cancelEditSubtaskName = () => {
+    cancelingSubtaskNameRef.current = true;
+    setEditingSubtaskName(null);
+  };
+
   const submitSubtask = () => {
     if (subtaskSubmittedRef.current) return;
     subtaskSubmittedRef.current = true;
@@ -170,6 +208,7 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
           {...listeners}
           className={cn(
             "group relative flex min-w-0 cursor-pointer items-center gap-2 rounded-md border border-transparent px-2 py-2 transition-colors hover:border-hairline hover:bg-surface-elevated active:cursor-grabbing",
+            large && "gap-2.5 px-2.5 py-2.5",
             urgent && "border-2 border-black hover:border-black",
             isDragging && "opacity-0",
             phase === "leaving" && "opacity-0 transition-opacity duration-200",
@@ -181,15 +220,25 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
             className="shrink-0"
           >
             {phase === "idle" ? (
-              <Checkbox checked={task.completed} onCheckedChange={handleToggle} />
+              <Checkbox
+                checked={task.completed}
+                onCheckedChange={handleToggle}
+                className={cn(large && "h-5 w-5")}
+              />
             ) : (
-              <CheckCircle2 className="h-4 w-4 animate-in zoom-in-50 duration-300 text-green-500" />
+              <CheckCircle2
+                className={cn(
+                  "h-4 w-4 animate-in zoom-in-50 duration-300 text-green-500",
+                  large && "h-5 w-5",
+                )}
+              />
             )}
           </div>
 
           <div
             className={cn(
               "min-w-0 flex-1 rounded-full px-3 py-1.5",
+              large && "px-4 py-2",
               u.dot,
               u.pillText,
               task.completed && "opacity-50",
@@ -197,17 +246,33 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
             aria-label={`${u.label} urgency`}
           >
             <div className="flex min-w-0 items-center justify-between gap-2">
-              <p className={cn("min-w-0 flex-1 truncate text-sm leading-snug", task.completed && "line-through")}>
+              <p
+                className={cn(
+                  "min-w-0 flex-1 truncate text-sm leading-snug",
+                  large && "text-base",
+                  task.completed && "line-through",
+                )}
+              >
                 {task.name}
               </p>
               {hatLabel && (
-                <span className="shrink-0 text-[10px] uppercase tracking-wide opacity-70">
+                <span
+                  className={cn(
+                    "shrink-0 text-[10px] uppercase tracking-wide opacity-70",
+                    large && "text-xs",
+                  )}
+                >
                   {hatLabel}
                 </span>
               )}
             </div>
             {(project || dueLabel) && (
-              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] opacity-80">
+              <div
+                className={cn(
+                  "mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] opacity-80",
+                  large && "text-xs",
+                )}
+              >
                 {project && (
                   <span className="inline-flex items-center gap-1">
                     {project.icon && <span>{project.icon}</span>}
@@ -225,6 +290,7 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
             size="icon"
             className={cn(
               "h-6 w-6 shrink-0",
+              large && "h-7 w-7",
               task.starred
                 ? "text-amber-500 opacity-100"
                 : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100",
@@ -236,7 +302,27 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
             onPointerDown={(e) => e.stopPropagation()}
             aria-label={task.starred ? "Remove from Priority view" : "Add to Priority view"}
           >
-            <Star className={cn("h-3.5 w-3.5", task.starred && "fill-current")} />
+            <Star className={cn("h-3.5 w-3.5", large && "h-4 w-4", task.starred && "fill-current")} />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-6 w-6 shrink-0",
+              large && "h-7 w-7",
+              task.pinned
+                ? "text-blue-500 opacity-100"
+                : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100",
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePin(task.id);
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            aria-label={task.pinned ? "Unpin as current task" : "Pin as current task"}
+          >
+            <Pin className={cn("h-3.5 w-3.5", large && "h-4 w-4", task.pinned && "fill-current")} />
           </Button>
 
           <DropdownMenu>
@@ -244,11 +330,14 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                className={cn(
+                  "h-6 w-6 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100",
+                  large && "h-7 w-7",
+                )}
                 onClick={(e) => e.stopPropagation()}
                 onPointerDown={(e) => e.stopPropagation()}
               >
-                <MoreHorizontal className="h-3.5 w-3.5" />
+                <MoreHorizontal className={cn("h-3.5 w-3.5", large && "h-4 w-4")} />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
@@ -267,7 +356,10 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
         </div>
 
         {(subtasks.length > 0 || addingSubtask) && (
-          <div onClick={(e) => e.stopPropagation()} className="mb-1.5 ml-9 mr-2 space-y-1">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={cn("mb-1.5 ml-9 mr-2 space-y-1", large && "ml-10")}
+          >
             {subtasks.map((st) => {
               const stDue = dueInfo(st.dueDate);
               return (
@@ -278,16 +370,42 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
                   <Checkbox
                     checked={st.completed}
                     onCheckedChange={() => toggleTask(st.id)}
-                    className="h-3.5 w-3.5"
+                    className={cn("h-3.5 w-3.5", large && "h-4 w-4")}
                   />
-                  <span
-                    className={cn(
-                      "flex-1 truncate text-xs text-ink-soft",
-                      st.completed && "text-ink-faint line-through",
-                    )}
-                  >
-                    {st.name}
-                  </span>
+                  {editingSubtaskName === st.id ? (
+                    <input
+                      autoFocus
+                      value={subtaskNameDraft}
+                      onChange={(e) => setSubtaskNameDraft(e.target.value)}
+                      onBlur={() => commitSubtaskName(st.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          commitSubtaskName(st.id);
+                        } else if (e.key === "Escape") {
+                          e.preventDefault();
+                          cancelEditSubtaskName();
+                        } else if (e.key === "Tab" && !e.shiftKey) {
+                          // Same rapid-add shortcut as the "add subtask" row:
+                          // save this rename and open a fresh blank one.
+                          e.preventDefault();
+                          commitSubtaskName(st.id);
+                          openAddSubtask();
+                        }
+                      }}
+                      className="h-6 min-w-0 flex-1 rounded border border-hairline bg-transparent px-1 text-xs text-ink outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    />
+                  ) : (
+                    <span
+                      onClick={() => startEditSubtaskName(st)}
+                      className={cn(
+                        "min-w-0 flex-1 cursor-text truncate text-xs text-ink-soft",
+                        st.completed && "text-ink-faint line-through",
+                      )}
+                    >
+                      {st.name}
+                    </span>
+                  )}
                   {editingSubtaskDue === st.id ? (
                     <input
                       type="date"
@@ -337,6 +455,16 @@ export function TaskItem({ task, project, onEdit, dragMode = "hat", keepOnComple
                   autoFocus
                   value={subtaskName}
                   onChange={(e) => setSubtaskName(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Tab saves this subtask and immediately opens a fresh
+                    // one, so you can rapid-fire several without reaching
+                    // for the mouse or the "Add subtask" menu item again.
+                    if (e.key === "Tab" && !e.shiftKey) {
+                      e.preventDefault();
+                      submitSubtask();
+                      openAddSubtask();
+                    }
+                  }}
                   placeholder="Subtask name"
                   className="h-6 flex-1 rounded border border-hairline bg-transparent px-1.5 text-xs text-ink outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />

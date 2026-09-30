@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/use-auth";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { LoginScreen } from "@/components/auth/LoginScreen";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { HatColumn } from "@/components/dashboard/HatColumn";
 import { PriorityList } from "@/components/dashboard/PriorityList";
@@ -160,7 +161,8 @@ function Dashboard() {
               ))}
             </div>
           </div>
-          <div className="flex flex-wrap shrink-0 gap-2">
+          <div className="flex flex-wrap shrink-0 items-center gap-2">
+            <ThemeToggle />
             <Button
               variant="ghost"
               size="sm"

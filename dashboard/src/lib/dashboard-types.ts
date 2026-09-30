@@ -28,21 +28,21 @@ export const URGENCY_META: Record<
   },
   high: {
     label: "High",
-    dot: "bg-urgency-high",
+    dot: "bg-urgency-high/85",
     ring: "ring-urgency-high/40",
     text: "text-urgency-high",
     pillText: "text-black/80",
   },
   medium: {
     label: "Medium",
-    dot: "bg-urgency-medium",
+    dot: "bg-urgency-medium/70",
     ring: "ring-urgency-medium/40",
     text: "text-urgency-medium",
     pillText: "text-black/80",
   },
   low: {
     label: "Low",
-    dot: "bg-urgency-low",
+    dot: "bg-urgency-low/55",
     ring: "ring-urgency-low/40",
     text: "text-urgency-low",
     pillText: "text-black/80",
@@ -86,13 +86,16 @@ export interface Task {
   completed: boolean;
   completedAt?: number;
   createdAt: number;
-  // Pinned to the Priority view (a second lens on the same tasks, not a
+  // Starred into the Priority view (a second lens on the same tasks, not a
   // separate list). starOrder ranks position within its column; starBucket
   // picks the column — undefined/"priority" is the top "Priority" column,
   // "future" is the lower one that newly-starred tasks land in by default.
   starred?: boolean;
   starOrder?: number;
   starBucket?: "priority" | "future";
+  // The single "current task" shown above Priority/Future — at most one task
+  // is pinned at a time; pinning another one unpins the previous.
+  pinned?: boolean;
 }
 
 // One entry per drill placed on a day. Slots aren't free text — every entry

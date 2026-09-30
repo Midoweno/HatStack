@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { addDays, format, parseISO } from "date-fns";
-import { Check, CheckCheck, ChevronDown, Minus, Plus, Star } from "lucide-react";
+import { Check, CheckCheck, ChevronDown, Minus, Plus, Star, X } from "lucide-react";
 import { useDashboard } from "@/lib/dashboard-store";
 import type { Hat, RecurrenceFreq, Task, Urgency } from "@/lib/dashboard-types";
 import { HATS, URGENCY_META } from "@/lib/dashboard-types";
@@ -88,6 +88,144 @@ function HoverSelect<T extends string>({
   );
 }
 
+interface DraftSubtask {
+  id: string;
+  name: string;
+  dueDate: string;
+}
+
+// An already-persisted subtask, edited in place: renaming commits on blur/
+// Enter (avoids firing a network update per keystroke), the due date commits
+// immediately since a date picker only fires onChange once per pick.
+function ExistingSubtaskRow({
+  subtask,
+  onUpdate,
+  onDelete,
+  onTabToNext,
+}: {
+  subtask: Task;
+  onUpdate: (patch: Partial<Task>) => void;
+  onDelete: () => void;
+  onTabToNext: () => void;
+}) {
+  const [name, setName] = useState(subtask.name);
+  useEffect(() => setName(subtask.name), [subtask.name]);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Escape sets this so the blur it triggers doesn't also commit the reverted
+  // text — Escape means discard, not save.
+  const cancelingRef = useRef(false);
+
+  const commitName = () => {
+    if (cancelingRef.current) {
+      cancelingRef.current = false;
+      return;
+    }
+    const trimmed = name.trim();
+    if (trimmed && trimmed !== subtask.name) onUpdate({ name: trimmed });
+    else setName(subtask.name);
+  };
+
+  const cancelEdit = () => {
+    cancelingRef.current = true;
+    setName(subtask.name);
+    inputRef.current?.blur();
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        ref={inputRef}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onBlur={commitName}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commitName();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            cancelEdit();
+          } else if (e.key === "Tab" && !e.shiftKey) {
+            // Same rapid-add shortcut as a blank subtask row: save this
+            // rename and open a fresh one.
+            e.preventDefault();
+            commitName();
+            onTabToNext();
+          }
+        }}
+        className="h-8 flex-1 text-sm"
+      />
+      <Input
+        type="date"
+        value={subtask.dueDate ?? ""}
+        onChange={(e) => onUpdate({ dueDate: e.target.value || undefined })}
+        className="h-8 w-auto shrink-0 text-xs"
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 shrink-0 text-ink-faint hover:text-destructive"
+        onClick={onDelete}
+        aria-label="Delete subtask"
+      >
+        <X className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
+}
+
+// A not-yet-created subtask staged in this dialog session — only becomes a
+// real task when the parent task is saved.
+function DraftSubtaskRow({
+  draft,
+  onChange,
+  onRemove,
+  onTabToNext,
+}: {
+  draft: DraftSubtask;
+  onChange: (patch: Partial<DraftSubtask>) => void;
+  onRemove: () => void;
+  onTabToNext: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        autoFocus
+        value={draft.name}
+        onChange={(e) => onChange({ name: e.target.value })}
+        onKeyDown={(e) => {
+          // Tab opens another blank subtask row instead of moving to the
+          // date field, so several can be added back-to-back from the
+          // keyboard alone.
+          if (e.key === "Tab" && !e.shiftKey) {
+            e.preventDefault();
+            onTabToNext();
+          }
+        }}
+        placeholder="Subtask name"
+        className="h-8 flex-1 text-sm"
+      />
+      <Input
+        type="date"
+        value={draft.dueDate}
+        onChange={(e) => onChange({ dueDate: e.target.value })}
+        className="h-8 w-auto shrink-0 text-xs"
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 shrink-0 text-ink-faint hover:text-destructive"
+        onClick={onRemove}
+        aria-label="Remove subtask"
+      >
+        <X className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
+}
+
 export function TaskDialog({
   open,
   onOpenChange,
@@ -97,8 +235,10 @@ export function TaskDialog({
 }: Props) {
   const addTask = useDashboard((s) => s.addTask);
   const updateTask = useDashboard((s) => s.updateTask);
+  const deleteTask = useDashboard((s) => s.deleteTask);
   const completeRecurringSeries = useDashboard((s) => s.completeRecurringSeries);
   const projects = useDashboard((s) => s.projects);
+  const allTasks = useDashboard((s) => s.tasks);
 
   const [name, setName] = useState("");
   const [hat, setHat] = useState<Hat>(defaultHat ?? "work");
@@ -111,6 +251,7 @@ export function TaskDialog({
   const [repeat, setRepeat] = useState<RecurrenceFreq | "none">("none");
   const [recurrenceInterval, setRecurrenceInterval] = useState(1);
   const [recurrenceEnd, setRecurrenceEnd] = useState("");
+  const [draftSubtasks, setDraftSubtasks] = useState<DraftSubtask[]>([]);
 
   useEffect(() => {
     if (open) {
@@ -125,6 +266,7 @@ export function TaskDialog({
       setRepeat(task?.recurrence?.freq ?? "none");
       setRecurrenceInterval(task?.recurrence?.interval ?? 1);
       setRecurrenceEnd(task?.recurrence?.until ?? "");
+      setDraftSubtasks([]);
     }
   }, [open, task, defaultHat, defaultProjectId]);
 
@@ -132,6 +274,21 @@ export function TaskDialog({
     () => projects.filter((p) => !p.completed && p.hat === hat),
     [projects, hat],
   );
+
+  const existingSubtasks = useMemo(
+    () => (task ? allTasks.filter((t) => t.parentTaskId === task.id) : []),
+    [allTasks, task],
+  );
+
+  const addDraftSubtask = () => {
+    setDraftSubtasks((rows) => [...rows, { id: crypto.randomUUID(), name: "", dueDate: "" }]);
+  };
+  const updateDraftSubtask = (id: string, patch: Partial<DraftSubtask>) => {
+    setDraftSubtasks((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  };
+  const removeDraftSubtask = (id: string) => {
+    setDraftSubtasks((rows) => rows.filter((r) => r.id !== id));
+  };
 
   useEffect(() => {
     if (projectId !== NONE && !availableProjects.some((p) => p.id === projectId)) {
@@ -158,6 +315,7 @@ export function TaskDialog({
             },
       starred,
     };
+    let parentId: string;
     if (task) {
       // Only bump starOrder (to the top of its column) when the star state
       // actually changed — newly starred, or moved to the other column —
@@ -168,8 +326,20 @@ export function TaskDialog({
         ...payload,
         ...(justStarred || bucketChanged ? { starOrder: Date.now(), starBucket } : {}),
       });
+      parentId = task.id;
     } else {
-      addTask({ ...payload, starBucket: starred ? starBucket : undefined });
+      parentId = addTask({ ...payload, starBucket: starred ? starBucket : undefined }).id;
+    }
+    for (const draft of draftSubtasks) {
+      const draftName = draft.name.trim();
+      if (!draftName) continue;
+      addTask({
+        hat,
+        urgency,
+        name: draftName,
+        dueDate: draft.dueDate || undefined,
+        parentTaskId: parentId,
+      });
     }
     onOpenChange(false);
   };
@@ -359,6 +529,33 @@ export function TaskDialog({
               placeholder="Notes, links, or details for this task"
               rows={3}
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Subtasks (optional)</Label>
+            <div className="space-y-2">
+              {existingSubtasks.map((st) => (
+                <ExistingSubtaskRow
+                  key={st.id}
+                  subtask={st}
+                  onUpdate={(patch) => updateTask(st.id, patch)}
+                  onDelete={() => deleteTask(st.id)}
+                  onTabToNext={addDraftSubtask}
+                />
+              ))}
+              {draftSubtasks.map((d) => (
+                <DraftSubtaskRow
+                  key={d.id}
+                  draft={d}
+                  onChange={(patch) => updateDraftSubtask(d.id, patch)}
+                  onRemove={() => removeDraftSubtask(d.id)}
+                  onTabToNext={addDraftSubtask}
+                />
+              ))}
+              <Button type="button" variant="outline" size="sm" className="w-full" onClick={addDraftSubtask}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" /> Add subtask
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-1.5">
