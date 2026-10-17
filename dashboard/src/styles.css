@@ -144,3 +144,24 @@
     letter-spacing: -0.02em;
   }
 }
+
+/* Pulsing ring on the overdue due-date chip. */
+@keyframes due-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--ink) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in oklch, var(--ink) 0%, transparent);
+  }
+}
+
+.animate-due-pulse {
+  animation: due-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-due-pulse {
+    animation: none;
+  }
+}

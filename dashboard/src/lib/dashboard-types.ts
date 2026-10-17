@@ -2,6 +2,17 @@ export type Hat = "routine" | "work" | "personal";
 
 export type Urgency = "critical" | "high" | "medium" | "low";
 
+// Which Priority-view section a starred task sits in.
+export type StarBucket = "priority" | "future" | "today";
+
+export type DeadlineType = "exam" | "assignment" | "project";
+
+export const DEADLINE_TYPES: { id: DeadlineType; label: string }[] = [
+  { id: "exam", label: "Exam" },
+  { id: "assignment", label: "Assignment" },
+  { id: "project", label: "Project" },
+];
+
 export const HATS: { id: Hat; label: string }[] = [
   { id: "work", label: "Work" },
   { id: "personal", label: "Personal" },
@@ -92,10 +103,14 @@ export interface Task {
   // "future" is the lower one that newly-starred tasks land in by default.
   starred?: boolean;
   starOrder?: number;
-  starBucket?: "priority" | "future";
+  starBucket?: StarBucket;
   // The single "current task" shown above Priority/Future — at most one task
   // is pinned at a time; pinning another one unpins the previous.
   pinned?: boolean;
+  // Marks this as an exam/assignment/project so the Priority view shows a
+  // countdown tile to its deadline: the recurrence end date if it repeats,
+  // otherwise its own due date.
+  deadlineType?: DeadlineType;
 }
 
 // One entry per drill placed on a day. Slots aren't free text — every entry

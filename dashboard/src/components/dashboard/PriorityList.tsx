@@ -12,8 +12,8 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import type { Project, Task } from "@/lib/dashboard-types";
-import { URGENCY_META, URGENCY_ORDER } from "@/lib/dashboard-types";
+import type { Project, StarBucket, Task } from "@/lib/dashboard-types";
+import { URGENCY_META } from "@/lib/dashboard-types";
 import { useDashboard } from "@/lib/dashboard-store";
 import { cn } from "@/lib/utils";
 import { TaskItem } from "./TaskItem";
@@ -24,21 +24,27 @@ interface Props {
   onEditTask: (t: Task) => void;
 }
 
-type Bucket = "priority" | "future";
+type Bucket = StarBucket;
 type ColumnState = Record<Bucket, string[]>;
 
-// "Default" is the persisted drag order (starOrder) — the other two are
-// display-only re-sorts within each column; they never touch starOrder, so
-// switching back to Default always restores exactly how things were left.
-type SortMode = "default" | "dueDate" | "priority";
+// "Default" is the Today / Priority / Future sections in their persisted drag
+// order (starOrder). The other two merge everything into one list and are
+// display-only; they never touch starOrder, so switching back to Default
+// always restores exactly how things were left.
+type SortMode = "default" | "dueDate" | "project";
 
 const SORT_MODES: { id: SortMode; label: string }[] = [
   { id: "default", label: "Default" },
   { id: "dueDate", label: "Due date" },
-  { id: "priority", label: "Priority" },
+  { id: "project", label: "Project" },
 ];
 
 const COLUMNS: { id: Bucket; label: string; empty: string }[] = [
+  {
+    id: "today",
+    label: "Today",
+    empty: "Drag a task here from Priority or Future that you need to finish today.",
+  },
   {
     id: "priority",
     label: "Priority",
@@ -52,24 +58,10 @@ const COLUMNS: { id: Bucket; label: string; empty: string }[] = [
 ];
 
 function bucketOf(t: Task): Bucket {
-  return t.starBucket === "future" ? "future" : "priority";
+  if (t.starBucket === "future" || t.starBucket === "today") return t.starBucket;
+  return "priority";
 }
 
-// Sorts within a single column only — Priority and Future never mix.
-function sortForDisplay(items: Task[], mode: SortMode): Task[] {
-  if (mode === "dueDate") {
-    return [...items].sort((a, b) => {
-      if (!a.dueDate && !b.dueDate) return 0;
-      if (!a.dueDate) return 1;
-      if (!b.dueDate) return -1;
-      return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0;
-    });
-  }
-  if (mode === "priority") {
-    return [...items].sort((a, b) => URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency]);
-  }
-  return items;
-}
 
 export function PriorityList({ tasks, projects, onEditTask }: Props) {
   const setStarredOrder = useDashboard((s) => s.setStarredOrder);
@@ -92,6 +84,9 @@ export function PriorityList({ tasks, projects, onEditTask }: Props) {
   // moment it's unpinned.
   const storeColumns: ColumnState = useMemo(
     () => ({
+      today: starredTasks
+        .filter((t) => !t.pinned && bucketOf(t) === "today")
+        .map((t) => t.id),
       priority: starredTasks
         .filter((t) => !t.pinned && bucketOf(t) === "priority")
         .map((t) => t.id),
@@ -122,6 +117,7 @@ export function PriorityList({ tasks, projects, onEditTask }: Props) {
   );
 
   const findColumn = (id: string): Bucket | undefined => {
+    if (id === "today-column") return "today";
     if (id === "priority-column") return "priority";
     if (id === "future-column") return "future";
     return (Object.keys(columns) as Bucket[]).find((b) => columns[b].includes(id));
@@ -173,10 +169,11 @@ export function PriorityList({ tasks, projects, onEditTask }: Props) {
   };
 
   const activeTask = activeId ? taskById.get(activeId) : null;
-  const columnsEmpty = columns.priority.length === 0 && columns.future.length === 0;
+  const columnsEmpty =
+    columns.today.length === 0 && columns.priority.length === 0 && columns.future.length === 0;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className="mx-auto max-w-4xl space-y-5">
       <div className="flex justify-end">
         <div className="inline-flex rounded-full border border-hairline bg-surface p-0.5">
           {SORT_MODES.map((m) => (
@@ -228,7 +225,6 @@ export function PriorityList({ tasks, projects, onEditTask }: Props) {
               taskById={taskById}
               projectById={projectById}
               onEditTask={onEditTask}
-              sortMode={sortMode}
             />
           ))}
           <DragOverlay>
@@ -245,23 +241,136 @@ export function PriorityList({ tasks, projects, onEditTask }: Props) {
             )}
           </DragOverlay>
         </DndContext>
+      ) : sortMode === "project" ? (
+        <ProjectGroupedCard
+          taskIds={[...storeColumns.today, ...storeColumns.priority, ...storeColumns.future]}
+          taskById={taskById}
+          projectById={projectById}
+          onEditTask={onEditTask}
+        />
       ) : (
-        <>
-          {COLUMNS.map((col) => (
-            <PriorityColumn
-              key={col.id}
-              id={col.id}
-              label={col.label}
-              emptyLabel={col.empty}
-              ids={columns[col.id]}
-              taskById={taskById}
-              projectById={projectById}
-              onEditTask={onEditTask}
-              sortMode={sortMode}
-            />
-          ))}
-        </>
+        <DueDateCard
+          taskIds={[...storeColumns.today, ...storeColumns.priority, ...storeColumns.future]}
+          taskById={taskById}
+          projectById={projectById}
+          onEditTask={onEditTask}
+        />
       )}
+    </div>
+  );
+}
+
+// The Due date sort also drops the Today/Priority/Future split: one list,
+// soonest first, tasks with no due date last. Ties keep their existing order.
+function DueDateCard({
+  taskIds,
+  taskById,
+  projectById,
+  onEditTask,
+}: {
+  taskIds: string[];
+  taskById: Map<string, Task>;
+  projectById: Map<string, Project>;
+  onEditTask: (t: Task) => void;
+}) {
+  const tasks = taskIds
+    .map((id) => taskById.get(id))
+    .filter((t): t is Task => !!t)
+    .sort((a, b) => {
+      if (!a.dueDate && !b.dueDate) return 0;
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0;
+    });
+
+  return (
+    <div className="rounded-2xl border border-hairline-strong bg-surface">
+      <header className="flex items-baseline justify-between border-b border-hairline px-6 pt-6 pb-5">
+        <h2 className="font-display text-3xl text-ink">By due date</h2>
+        <span className="text-sm tabular-nums text-ink-faint">{tasks.length}</span>
+      </header>
+      <div className="space-y-1 p-4">
+        {tasks.map((t) => (
+          <TaskItem
+            key={t.id}
+            task={t}
+            project={t.projectId ? projectById.get(t.projectId) : undefined}
+            onEdit={onEditTask}
+            large
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// The Project sort drops the Today/Priority/Future split: everything starred
+// merges into one list, grouped under a small header per project (A–Z, tasks
+// with no project last). Within a project, tasks keep their existing order.
+function ProjectGroupedCard({
+  taskIds,
+  taskById,
+  projectById,
+  onEditTask,
+}: {
+  taskIds: string[];
+  taskById: Map<string, Task>;
+  projectById: Map<string, Project>;
+  onEditTask: (t: Task) => void;
+}) {
+  const tasks = taskIds.map((id) => taskById.get(id)).filter((t): t is Task => !!t);
+
+  const byProject = new Map<string, Task[]>();
+  const standalone: Task[] = [];
+  for (const t of tasks) {
+    if (t.projectId && projectById.has(t.projectId)) {
+      byProject.set(t.projectId, [...(byProject.get(t.projectId) ?? []), t]);
+    } else {
+      standalone.push(t);
+    }
+  }
+  const groups = [...byProject.entries()]
+    .map(([projectId, items]) => ({
+      key: projectId,
+      name: projectById.get(projectId)?.name ?? "",
+      items,
+      muted: false,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  if (standalone.length > 0) {
+    groups.push({ key: "none", name: "No project", items: standalone, muted: true });
+  }
+
+  return (
+    <div className="rounded-2xl border border-hairline-strong bg-surface">
+      <header className="flex items-baseline justify-between border-b border-hairline px-6 pt-6 pb-5">
+        <h2 className="font-display text-3xl text-ink">By project</h2>
+        <span className="text-sm tabular-nums text-ink-faint">{tasks.length}</span>
+      </header>
+      <div className="p-4">
+        {groups.map((g) => (
+          <section key={g.key}>
+            <div className="mb-1.5 mt-5 flex items-center gap-2 px-0.5 first:mt-1">
+              <span
+                className={cn(
+                  "whitespace-nowrap text-xs uppercase tracking-[0.1em]",
+                  g.muted ? "font-medium text-ink-faint" : "font-bold text-ink-soft",
+                )}
+              >
+                {g.name}
+              </span>
+              <span className="text-xs tabular-nums text-ink-faint">{g.items.length}</span>
+              <span className="h-px flex-1 bg-hairline" />
+            </div>
+            <div className="space-y-1">
+              {g.items.map((t) => (
+                // No project passed on purpose: the header already names it.
+                <TaskItem key={t.id} task={t} onEdit={onEditTask} large />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
     </div>
   );
 }
@@ -304,7 +413,6 @@ function PriorityColumn({
   taskById,
   projectById,
   onEditTask,
-  sortMode,
 }: {
   id: Bucket;
   label: string;
@@ -313,52 +421,41 @@ function PriorityColumn({
   taskById: Map<string, Task>;
   projectById: Map<string, Project>;
   onEditTask: (t: Task) => void;
-  sortMode: SortMode;
 }) {
-  // Manual drag-to-reorder only makes sense against the Default order — a
-  // Due date/Priority sort re-derives the order every render, so a drop
-  // would just get overwritten right back by the next render anyway.
-  const interactive = sortMode === "default";
-  const { setNodeRef, isOver } = useDroppable({ id: `${id}-column`, disabled: !interactive });
-  const rawItems = ids.map((id) => taskById.get(id)).filter((t): t is Task => !!t);
-  const items = interactive ? rawItems : sortForDisplay(rawItems, sortMode);
-
-  const list = (
-    <div className="space-y-1">
-      {items.map((t) => (
-        <TaskItem
-          key={t.id}
-          task={t}
-          project={t.projectId ? projectById.get(t.projectId) : undefined}
-          onEdit={onEditTask}
-          dragMode={interactive ? "sortable" : undefined}
-          large
-        />
-      ))}
-    </div>
-  );
+  const { setNodeRef, isOver } = useDroppable({ id: `${id}-column` });
+  const items = ids.map((id) => taskById.get(id)).filter((t): t is Task => !!t);
 
   return (
     <div
       className={cn(
         "rounded-2xl border border-hairline-strong bg-surface transition-colors",
-        interactive && isOver && "border-ink/30 bg-accent/40",
+        isOver && "border-ink/30 bg-accent/40",
       )}
     >
       <header className="flex items-baseline justify-between border-b border-hairline px-6 pt-6 pb-5">
         <h2 className="font-display text-3xl text-ink">{label}</h2>
         <span className="text-sm tabular-nums text-ink-faint">{items.length}</span>
       </header>
-      <div ref={interactive ? setNodeRef : undefined} className="min-h-[64px] p-4">
-        {items.length === 0 ? (
-          <p className="px-2 py-4 text-center text-sm text-ink-faint">{emptyLabel}</p>
-        ) : interactive ? (
-          <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-            {list}
-          </SortableContext>
-        ) : (
-          list
-        )}
+      <div ref={setNodeRef} className="min-h-[64px] p-4">
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          {items.length === 0 ? (
+            <p className="px-2 py-4 text-center text-sm text-ink-faint">{emptyLabel}</p>
+          ) : (
+            <div className="space-y-1">
+              {items.map((t) => (
+                <TaskItem
+                  key={t.id}
+                  task={t}
+                  project={t.projectId ? projectById.get(t.projectId) : undefined}
+                  onEdit={onEditTask}
+                  dragMode="sortable"
+                  sectionBucket={id}
+                  large
+                />
+              ))}
+            </div>
+          )}
+        </SortableContext>
       </div>
     </div>
   );

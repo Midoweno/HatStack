@@ -2,11 +2,24 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { differenceInCalendarDays, isPast, isToday, parseISO } from "date-fns";
-import { MoreHorizontal, Trash2, Star, Pin, CheckCircle2, ListPlus, X } from "lucide-react";
+import { differenceInCalendarDays, format, isPast, isToday, parseISO } from "date-fns";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  ListPlus,
+  MoreHorizontal,
+  Pin,
+  Star,
+  Trash2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
-import type { Project, Task } from "@/lib/dashboard-types";
-import { HATS, URGENCY_META } from "@/lib/dashboard-types";
+import type { DeadlineType, Project, StarBucket, Task } from "@/lib/dashboard-types";
+import { DEADLINE_TYPES, HATS, URGENCY_META } from "@/lib/dashboard-types";
+import { DEADLINE_ICONS } from "@/lib/deadline-icons";
 import { useDashboard } from "@/lib/dashboard-store";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -33,13 +46,24 @@ interface Props {
   // Renders ~25% bigger (Priority view only) — real sizing, not a CSS
   // zoom/transform, so dnd-kit's pointer math stays accurate while dragging.
   large?: boolean;
+  // Which Priority-view section this row sits in; when set, the row shows
+  // up/down arrows to move it to the neighbouring section.
+  sectionBucket?: StarBucket;
 }
+
+const SECTION_ORDER: StarBucket[] = ["today", "priority", "future"];
+const SECTION_LABELS: Record<StarBucket, string> = {
+  today: "Today",
+  priority: "Priority",
+  future: "Future",
+};
 
 const COMPLETE_ANIMATION_MS = 450;
 const COLLAPSE_ANIMATION_MS = 260;
 
 function dueInfo(dueDate: string | undefined) {
   const due = dueDate ? parseISO(dueDate) : null;
+  const days = due ? differenceInCalendarDays(due, new Date()) : null;
   const overdue = due ? isPast(due) && !isToday(due) : false;
   const label = due
     ? isToday(due)
@@ -50,7 +74,75 @@ function dueInfo(dueDate: string | undefined) {
           return overdue ? `${days} ${unit} overdue` : `In ${days} ${unit}`;
         })()
     : null;
-  return { due, overdue, label };
+  return { due, days, overdue, label };
+}
+
+// Chip tiers: overdue and today are filled, 1–3 days out is outlined, and
+// anything further out gets no chip at all.
+function dueChipFor(days: number | null, completed: boolean) {
+  if (completed || days === null) return null;
+  if (days < 0) {
+    const n = -days;
+    return { kind: "overdue" as const, text: `${n} ${n === 1 ? "DAY" : "DAYS"} LATE` };
+  }
+  if (days === 0) return { kind: "today" as const, text: "TODAY" };
+  if (days <= 3) {
+    return { kind: "soon" as const, text: days === 1 ? "TOMORROW" : `IN ${days} DAYS` };
+  }
+  return null;
+}
+
+const TILE_STYLES = {
+  far: "border-ink/40 bg-surface-elevated text-ink",
+  soon: "border-2 border-ink bg-surface-elevated text-ink",
+  today: "border-ink bg-ink text-background",
+  overdue: "animate-due-pulse border-ink bg-ink text-background outline-2 outline-offset-2 outline-ink",
+} as const;
+
+// Large icon at the left of the row, about as tall as a task pill, showing
+// which kind of deadline this is (exam / assignment / project).
+function DeadlineBadge({ type }: { type: DeadlineType }) {
+  const Icon = DEADLINE_ICONS[type];
+  const label = DEADLINE_TYPES.find((d) => d.id === type)?.label ?? type;
+  return (
+    <div
+      role="img"
+      aria-label={label}
+      title={label}
+      className="flex h-10 w-10 shrink-0 items-center justify-center text-ink"
+    >
+      <Icon className="h-[34px] w-[34px]" />
+    </div>
+  );
+}
+
+function DeadlineTile({
+  tier,
+  days,
+  sub,
+}: {
+  tier: keyof typeof TILE_STYLES;
+  days: number;
+  sub: string;
+}) {
+  const big = tier === "today" ? "TODAY" : tier === "overdue" ? `−${-days}d` : `${days}d`;
+
+  return (
+    <div
+      aria-label={`Deadline: ${big}`}
+      className={cn(
+        "w-[62px] shrink-0 rounded-lg border-[1.5px] px-1 py-1.5 text-center",
+        TILE_STYLES[tier],
+      )}
+    >
+      <div
+        className={cn("font-extrabold leading-none", tier === "today" ? "text-[11px]" : "text-[17px]")}
+      >
+        {big}
+      </div>
+      <span className="mt-1 block text-[9px] font-semibold leading-none opacity-70">{sub}</span>
+    </div>
+  );
 }
 
 export function TaskItem({
@@ -60,6 +152,7 @@ export function TaskItem({
   dragMode = "hat",
   keepOnComplete = false,
   large = false,
+  sectionBucket,
 }: Props) {
   const toggleTask = useDashboard((s) => s.toggleTask);
   const updateTask = useDashboard((s) => s.updateTask);
@@ -137,9 +230,43 @@ export function TaskItem({
         ? { transform: `translate3d(${hatDrag.transform.x}px, ${hatDrag.transform.y}px, 0)` }
         : undefined;
 
-  const { due, overdue, label: dueLabel } = dueInfo(task.dueDate);
-  const urgent = !task.completed && due !== null && (isToday(due) || overdue);
+  const { days, overdue, label: dueLabel } = dueInfo(task.dueDate);
+  const dueChip = dueChipFor(days, task.completed);
+
+  // Countdown tile for any task with a date (Priority view only). It counts
+  // down to the recurrence end date for a typed task or a "daily until due"
+  // series, and to the task's own due date otherwise.
+  const rec = task.recurrence;
+  const isDailyUntil = rec?.freq === "daily" && rec.interval === 1 && !!rec.until;
+  const deadlineDate =
+    task.deadlineType || isDailyUntil ? (rec?.until ?? task.dueDate) : task.dueDate;
+  const deadlineDays = deadlineDate ? differenceInCalendarDays(parseISO(deadlineDate), new Date()) : null;
+  const deadlineTier =
+    deadlineDays === null
+      ? null
+      : deadlineDays < 0
+        ? "overdue"
+        : deadlineDays === 0
+          ? "today"
+          : deadlineDays <= 3
+            ? "soon"
+            : "far";
+  // The icon needs a Type; the countdown tile only needs a date to count to.
+  const showDeadlineIcon = large && !task.completed && !!task.deadlineType;
+  const showDeadlineTile = large && !task.completed && deadlineTier !== null;
   const hatLabel = HATS.find((h) => h.id === task.hat)?.label;
+
+  // Up/down arrows between the Today / Priority / Future sections (Default
+  // sort only — the caller passes sectionBucket only there). A moved task
+  // lands at the top of its new section.
+  const sectionIndex = sectionBucket ? SECTION_ORDER.indexOf(sectionBucket) : -1;
+  const moveUpTo = sectionIndex > 0 ? SECTION_ORDER[sectionIndex - 1] : null;
+  const moveDownTo =
+    sectionIndex >= 0 && sectionIndex < SECTION_ORDER.length - 1
+      ? SECTION_ORDER[sectionIndex + 1]
+      : null;
+  const moveToSection = (bucket: StarBucket) =>
+    updateTask(task.id, { starBucket: bucket, starOrder: Date.now() });
 
   // Guards against submitting twice: pressing Enter fires the form's submit,
   // which unmounts the input, which then fires its own blur — without this,
@@ -209,7 +336,6 @@ export function TaskItem({
           className={cn(
             "group relative flex min-w-0 cursor-pointer items-center gap-2 rounded-md border border-transparent px-2 py-2 transition-colors hover:border-hairline hover:bg-surface-elevated active:cursor-grabbing",
             large && "gap-2.5 px-2.5 py-2.5",
-            urgent && "border-2 border-black hover:border-black",
             isDragging && "opacity-0",
             phase === "leaving" && "opacity-0 transition-opacity duration-200",
           )}
@@ -235,6 +361,8 @@ export function TaskItem({
             )}
           </div>
 
+          {showDeadlineIcon && task.deadlineType && <DeadlineBadge type={task.deadlineType} />}
+
           <div
             className={cn(
               "min-w-0 flex-1 rounded-full px-3 py-1.5",
@@ -255,35 +383,106 @@ export function TaskItem({
               >
                 {task.name}
               </p>
-              {hatLabel && (
+              {dueChip ? (
                 <span
                   className={cn(
-                    "shrink-0 text-[10px] uppercase tracking-wide opacity-70",
-                    large && "text-xs",
+                    "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide",
+                    large && "px-2.5 text-xs",
+                    dueChip.kind === "soon" && "border-[1.5px] border-ink py-px text-ink",
+                    dueChip.kind === "today" && "bg-ink text-background",
+                    dueChip.kind === "overdue" &&
+                      "mr-0.5 animate-due-pulse bg-ink text-background outline-2 outline-offset-2 outline-ink",
                   )}
                 >
-                  {hatLabel}
+                  {dueChip.kind === "overdue" ? (
+                    <AlertTriangle className="h-2.5 w-2.5" />
+                  ) : (
+                    <Clock className="h-2.5 w-2.5" />
+                  )}
+                  {dueChip.text}
                 </span>
+              ) : (
+                hatLabel && (
+                  <span
+                    className={cn(
+                      "shrink-0 text-[10px] uppercase tracking-wide opacity-70",
+                      large && "text-xs",
+                    )}
+                  >
+                    {hatLabel}
+                  </span>
+                )
               )}
             </div>
-            {(project || dueLabel) && (
+            {(project || dueLabel || (dueChip && hatLabel)) && (
               <div
                 className={cn(
                   "mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] opacity-80",
                   large && "text-xs",
                 )}
               >
+                {dueChip && hatLabel && (
+                  <span className="uppercase tracking-wide">{hatLabel}</span>
+                )}
+                {dueChip && hatLabel && project && <span className="opacity-70">·</span>}
                 {project && (
                   <span className="inline-flex items-center gap-1">
                     {project.icon && <span>{project.icon}</span>}
                     <span className="truncate">{project.name}</span>
                   </span>
                 )}
-                {project && dueLabel && <span className="opacity-70">·</span>}
-                {dueLabel && <span className={cn(overdue && "font-semibold")}>{dueLabel}</span>}
+                {!dueChip && project && dueLabel && <span className="opacity-70">·</span>}
+                {!dueChip && dueLabel && (
+                  <span className={cn(overdue && "font-semibold")}>{dueLabel}</span>
+                )}
               </div>
             )}
           </div>
+
+          {showDeadlineTile && deadlineTier && deadlineDays !== null && (
+            <DeadlineTile
+              tier={deadlineTier}
+              days={deadlineDays}
+              sub={
+                deadlineDate && deadlineDate !== task.dueDate
+                  ? format(parseISO(deadlineDate), "MMM d")
+                  : deadlineTier === "overdue"
+                    ? "late"
+                    : "due"
+              }
+            />
+          )}
+
+          {sectionIndex >= 0 && (
+            <div
+              className="flex shrink-0 flex-col overflow-hidden rounded-md border border-hairline bg-surface-elevated opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                disabled={!moveUpTo}
+                onClick={() => moveUpTo && moveToSection(moveUpTo)}
+                title={moveUpTo ? `Move to ${SECTION_LABELS[moveUpTo]}` : undefined}
+                aria-label={moveUpTo ? `Move to ${SECTION_LABELS[moveUpTo]}` : "Already in the top section"}
+                className="flex h-5 w-7 items-center justify-center text-ink transition-colors hover:bg-accent disabled:cursor-default disabled:opacity-25 disabled:hover:bg-transparent"
+              >
+                <ChevronUp className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                disabled={!moveDownTo}
+                onClick={() => moveDownTo && moveToSection(moveDownTo)}
+                title={moveDownTo ? `Move to ${SECTION_LABELS[moveDownTo]}` : undefined}
+                aria-label={
+                  moveDownTo ? `Move to ${SECTION_LABELS[moveDownTo]}` : "Already in the bottom section"
+                }
+                className="flex h-5 w-7 items-center justify-center border-t border-hairline text-ink transition-colors hover:bg-accent disabled:cursor-default disabled:opacity-25 disabled:hover:bg-transparent"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
+            </div>
+          )}
 
           <Button
             variant="ghost"

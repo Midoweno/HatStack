@@ -2,8 +2,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { addDays, format, parseISO } from "date-fns";
 import { Check, CheckCheck, ChevronDown, Minus, Plus, Star, X } from "lucide-react";
 import { useDashboard } from "@/lib/dashboard-store";
-import type { Hat, RecurrenceFreq, Task, Urgency } from "@/lib/dashboard-types";
-import { HATS, URGENCY_META } from "@/lib/dashboard-types";
+import type {
+  DeadlineType,
+  Hat,
+  RecurrenceFreq,
+  StarBucket,
+  Task,
+  Urgency,
+} from "@/lib/dashboard-types";
+import { DEADLINE_TYPES, HATS, URGENCY_META } from "@/lib/dashboard-types";
+import { DEADLINE_ICONS } from "@/lib/deadline-icons";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -243,14 +252,21 @@ export function TaskDialog({
   const [name, setName] = useState("");
   const [hat, setHat] = useState<Hat>(defaultHat ?? "work");
   const [urgency, setUrgency] = useState<Urgency>("medium");
+  const [deadlineType, setDeadlineType] = useState<DeadlineType | undefined>(undefined);
   const [dueDate, setDueDate] = useState("");
   const [description, setDescription] = useState("");
-  const [starred, setStarred] = useState(false);
-  const [starBucket, setStarBucket] = useState<"priority" | "future">("future");
+  // New tasks start starred (landing in Future); un-star to keep one out of
+  // the Priority view.
+  const [starred, setStarred] = useState(true);
+  const [starBucket, setStarBucket] = useState<StarBucket>("future");
   const [projectId, setProjectId] = useState<string>(NONE);
   const [repeat, setRepeat] = useState<RecurrenceFreq | "none">("none");
   const [recurrenceInterval, setRecurrenceInterval] = useState(1);
   const [recurrenceEnd, setRecurrenceEnd] = useState("");
+  // "Work on it every day until it's due": a daily repeat that ends on the
+  // deadline. While on, the date field below means the deadline (the series
+  // end date) and the generic Repeat controls are hidden.
+  const [dailyUntilDue, setDailyUntilDue] = useState(false);
   const [draftSubtasks, setDraftSubtasks] = useState<DraftSubtask[]>([]);
 
   useEffect(() => {
@@ -258,14 +274,18 @@ export function TaskDialog({
       setName(task?.name ?? "");
       setHat(task?.hat ?? defaultHat ?? "work");
       setUrgency(task?.urgency ?? "medium");
-      setDueDate(task?.dueDate ?? "");
+      setDeadlineType(task?.deadlineType);
+      const rec = task?.recurrence;
+      const isDailyUntil = !!rec && rec.freq === "daily" && rec.interval === 1 && !!rec.until;
+      setDailyUntilDue(isDailyUntil);
+      setDueDate(isDailyUntil ? (rec?.until ?? "") : (task?.dueDate ?? ""));
       setDescription(task?.description ?? "");
-      setStarred(task?.starred ?? false);
+      setStarred(task ? (task.starred ?? false) : true);
       setStarBucket(task?.starBucket ?? "future");
       setProjectId(task?.projectId ?? defaultProjectId ?? NONE);
-      setRepeat(task?.recurrence?.freq ?? "none");
-      setRecurrenceInterval(task?.recurrence?.interval ?? 1);
-      setRecurrenceEnd(task?.recurrence?.until ?? "");
+      setRepeat(isDailyUntil ? "none" : (rec?.freq ?? "none"));
+      setRecurrenceInterval(rec?.interval ?? 1);
+      setRecurrenceEnd(isDailyUntil ? "" : (rec?.until ?? ""));
       setDraftSubtasks([]);
     }
   }, [open, task, defaultHat, defaultProjectId]);
@@ -296,17 +316,41 @@ export function TaskDialog({
     }
   }, [hat, availableProjects, projectId]);
 
+  // The date field can't be a deadline without a date in it.
+  useEffect(() => {
+    if (!dueDate && dailyUntilDue) setDailyUntilDue(false);
+  }, [dueDate, dailyUntilDue]);
+
   const submit = () => {
     if (!name.trim()) return;
+    const daily = dailyUntilDue && !!dueDate;
+
+    // In daily mode the date field is the deadline, and the task's own due
+    // date is today's copy: today, or — when this task already was a daily
+    // series — wherever its current copy is, as long as that's not past the
+    // (possibly just-edited) deadline.
+    let taskDue = dueDate || undefined;
+    if (daily) {
+      const today = format(new Date(), "yyyy-MM-dd");
+      const wasDaily =
+        task?.recurrence?.freq === "daily" &&
+        task.recurrence.interval === 1 &&
+        !!task.recurrence.until;
+      const current = wasDaily ? task?.dueDate : undefined;
+      taskDue = current && current <= dueDate ? current : today <= dueDate ? today : dueDate;
+    }
+
     const payload = {
       name: name.trim(),
       hat,
       urgency,
-      dueDate: dueDate || undefined,
+      deadlineType,
+      dueDate: taskDue,
       description: description.trim() || undefined,
       projectId: projectId === NONE ? undefined : projectId,
-      recurrence:
-        repeat === "none"
+      recurrence: daily
+        ? { freq: "daily" as const, interval: 1, until: dueDate }
+        : repeat === "none"
           ? undefined
           : {
               freq: repeat,
@@ -411,7 +455,7 @@ export function TaskDialog({
             </div>
             {starred && (
               <div className="mt-2 inline-flex rounded-full border border-hairline bg-surface p-0.5">
-                {(["priority", "future"] as const).map((b) => (
+                {(["today", "priority", "future"] as const).map((b) => (
                   <button
                     key={b}
                     type="button"
@@ -423,7 +467,7 @@ export function TaskDialog({
                         : "text-ink-faint hover:text-ink-soft",
                     )}
                   >
-                    {b === "priority" ? "Prio" : "Future"}
+                    {b === "priority" ? "Prio" : b === "today" ? "Today" : "Future"}
                   </button>
                 ))}
               </div>
@@ -480,7 +524,40 @@ export function TaskDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Due date</Label>
+            <Label>Type (optional)</Label>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={() => setDeadlineType(undefined)}
+                className={cn(
+                  "flex flex-1 items-center justify-center rounded-md border border-hairline px-2 py-2 text-xs transition-colors",
+                  deadlineType === undefined ? "border-ink/40 bg-accent" : "hover:border-ink-faint/40",
+                )}
+              >
+                None
+              </button>
+              {DEADLINE_TYPES.map((d) => {
+                const Icon = DEADLINE_ICONS[d.id];
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => setDeadlineType(d.id)}
+                    className={cn(
+                      "flex flex-1 items-center justify-center gap-1.5 rounded-md border border-hairline px-2 py-2 text-xs transition-colors",
+                      deadlineType === d.id ? "border-ink/40 bg-accent" : "hover:border-ink-faint/40",
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {d.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>{dailyUntilDue ? "Deadline" : "Due date"}</Label>
             <div className="space-y-2">
               <div className="flex items-center justify-center gap-2">
                 <Button
@@ -518,6 +595,34 @@ export function TaskDialog({
               >
                 Due Today
               </Button>
+              <label
+                className={cn(
+                  "flex items-start gap-3 rounded-md border border-hairline px-3 py-2.5",
+                  dueDate ? "cursor-pointer hover:border-ink-faint/40" : "cursor-not-allowed opacity-60",
+                )}
+              >
+                <Checkbox
+                  checked={dailyUntilDue}
+                  disabled={!dueDate}
+                  onCheckedChange={(v) => {
+                    setDailyUntilDue(v === true);
+                    if (v === true) setRepeat("none");
+                  }}
+                  className="mt-0.5"
+                />
+                <span className="min-w-0 text-sm leading-snug">
+                  <span className="font-medium">Work on it every day until it's due</span>
+                  <span className="mt-0.5 block text-xs text-ink-faint">
+                    {!dueDate
+                      ? "Pick a due date first."
+                      : dailyUntilDue
+                        ? `A fresh copy shows up each day, ending ${format(parseISO(dueDate), "EEE, MMM d")}.${
+                            deadlineType ? "" : " Set a Type above to see a countdown tile."
+                          }`
+                        : "Completing today's copy brings it back tomorrow, until the due date."}
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
 
@@ -558,6 +663,8 @@ export function TaskDialog({
             </div>
           </div>
 
+          {!dailyUntilDue && (
+            <>
           <div className="space-y-1.5">
             <Label>Repeat</Label>
             <Select
@@ -597,6 +704,8 @@ export function TaskDialog({
                 />
               </div>
             </div>
+          )}
+            </>
           )}
         </div>
         <DialogFooter>

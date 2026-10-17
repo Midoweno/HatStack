@@ -5,11 +5,13 @@ import { toast } from "sonner";
 import { supabase } from "./supabase";
 import type {
   DashboardState,
+  DeadlineType,
   Drill,
   Hat,
   Project,
   Recurrence,
   RecurrenceFreq,
+  StarBucket,
   Task,
   Urgency,
   Workout,
@@ -51,9 +53,15 @@ function nextOccurrence(task: Task): Task | null {
     completed: false,
     completedAt: undefined,
     createdAt: Date.now(),
-    // Completing a starred recurring task bumps its next occurrence down to
-    // Future — Priority is for what's actively being worked on right now.
-    ...(task.starred ? { starBucket: "future" as const, starOrder: Date.now() } : {}),
+    // A starred recurring task's next copy steps one section down, landing at
+    // the top of it: completed in Today -> Priority, completed in Priority
+    // (or Future) -> Future. A missing bucket means Priority.
+    ...(task.starred
+      ? {
+          starBucket: (task.starBucket === "today" ? "priority" : "future") as StarBucket,
+          starOrder: Date.now(),
+        }
+      : {}),
   };
 }
 
@@ -91,8 +99,9 @@ type TaskRow = {
   created_at: string;
   starred: boolean;
   star_order: number | null;
-  star_bucket: "priority" | "future" | null;
+  star_bucket: StarBucket | null;
   pinned: boolean;
+  deadline_type: DeadlineType | null;
 };
 
 function projectFromRow(row: ProjectRow): Project {
@@ -162,6 +171,7 @@ function taskFromRow(row: TaskRow): Task {
     starOrder: row.star_order ?? undefined,
     starBucket: row.star_bucket ?? undefined,
     pinned: row.pinned,
+    deadlineType: row.deadline_type ?? undefined,
   };
 }
 
@@ -187,6 +197,7 @@ function taskToRow(userId: string, t: Task): TaskRow {
     star_order: t.starOrder ?? null,
     star_bucket: t.starBucket ?? null,
     pinned: t.pinned ?? false,
+    deadline_type: t.deadlineType ?? null,
   };
 }
 
@@ -213,6 +224,7 @@ function taskPatchToRow(patch: Partial<Omit<Task, "id">>) {
   if ("starOrder" in patch) row.star_order = patch.starOrder ?? null;
   if ("starBucket" in patch) row.star_bucket = patch.starBucket ?? null;
   if ("pinned" in patch) row.pinned = patch.pinned ?? false;
+  if ("deadlineType" in patch) row.deadline_type = patch.deadlineType ?? null;
   return row;
 }
 
@@ -305,7 +317,8 @@ interface Store extends DashboardState {
     parentTaskId?: string;
     recurrence?: Recurrence;
     starred?: boolean;
-    starBucket?: "priority" | "future";
+    starBucket?: StarBucket;
+    deadlineType?: DeadlineType;
   }) => Task;
   updateTask: (id: string, patch: Partial<Omit<Task, "id">>) => void;
   // Returns the id of the next recurring occurrence created, if any, so
@@ -322,7 +335,7 @@ interface Store extends DashboardState {
   // column, or moved in from the other one). orderedIds must include the
   // moved task if this is a cross-column move — its starBucket is set to
   // `bucket` along with everyone else's rank.
-  setStarredOrder: (bucket: "priority" | "future", orderedIds: string[]) => void;
+  setStarredOrder: (bucket: StarBucket, orderedIds: string[]) => void;
 
   // Pins this task as the single "current task" shown above Priority/Future;
   // pinning one unpins whichever task was previously pinned. Calling it on
@@ -532,6 +545,7 @@ export const useDashboard = create<Store>()((set, get) => ({
       dueDate: input.dueDate,
       description: input.description,
       recurrence: input.recurrence,
+      deadlineType: input.deadlineType,
       completed: false,
       createdAt: Date.now(),
       starred: input.starred,
@@ -693,7 +707,7 @@ export const useDashboard = create<Store>()((set, get) => ({
   },
 
   toggleStar: (id) => {
-    let patch: { starred: boolean; starOrder?: number; starBucket?: "priority" | "future" } | undefined;
+    let patch: { starred: boolean; starOrder?: number; starBucket?: StarBucket } | undefined;
     set((s) => ({
       tasks: s.tasks.map((t) => {
         if (t.id !== id) return t;
