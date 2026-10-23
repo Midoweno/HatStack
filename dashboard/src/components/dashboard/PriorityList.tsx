@@ -285,11 +285,11 @@ function DueDateCard({
 
   return (
     <div className="rounded-2xl border border-hairline-strong bg-surface">
-      <header className="flex items-baseline justify-between border-b border-hairline px-6 pt-6 pb-5">
-        <h2 className="font-display text-3xl text-ink">By due date</h2>
+      <header className="flex items-baseline justify-between border-b border-hairline px-4 pt-5 pb-4 sm:px-6 sm:pt-6 sm:pb-5">
+        <h2 className="font-display text-2xl sm:text-3xl text-ink">By due date</h2>
         <span className="text-sm tabular-nums text-ink-faint">{tasks.length}</span>
       </header>
-      <div className="space-y-1 p-4">
+      <div className="space-y-1 p-2 sm:p-4">
         {tasks.map((t) => (
           <TaskItem
             key={t.id}
@@ -343,11 +343,11 @@ function ProjectGroupedCard({
 
   return (
     <div className="rounded-2xl border border-hairline-strong bg-surface">
-      <header className="flex items-baseline justify-between border-b border-hairline px-6 pt-6 pb-5">
-        <h2 className="font-display text-3xl text-ink">By project</h2>
+      <header className="flex items-baseline justify-between border-b border-hairline px-4 pt-5 pb-4 sm:px-6 sm:pt-6 sm:pb-5">
+        <h2 className="font-display text-2xl sm:text-3xl text-ink">By project</h2>
         <span className="text-sm tabular-nums text-ink-faint">{tasks.length}</span>
       </header>
-      <div className="p-4">
+      <div className="p-2 sm:p-4">
         {groups.map((g) => (
           <section key={g.key}>
             <div className="mb-1.5 mt-5 flex items-center gap-2 px-0.5 first:mt-1">
@@ -388,8 +388,8 @@ function CurrentTaskCard({
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-hairline-strong bg-surface">
-      <header className="flex items-baseline justify-between bg-ink px-6 pt-5 pb-4">
-        <h2 className="font-display text-3xl text-background">Current</h2>
+      <header className="flex items-baseline justify-between bg-ink px-4 pt-4 pb-3 sm:px-6 sm:pt-5 sm:pb-4">
+        <h2 className="font-display text-2xl sm:text-3xl text-background">Current</h2>
         <button
           type="button"
           onClick={onUnpin}
@@ -398,7 +398,7 @@ function CurrentTaskCard({
           Clear
         </button>
       </header>
-      <div className="p-4">
+      <div className="p-2 sm:p-4">
         <TaskItem task={task} project={project} onEdit={onEditTask} large />
       </div>
     </div>
@@ -432,11 +432,11 @@ function PriorityColumn({
         isOver && "border-ink/30 bg-accent/40",
       )}
     >
-      <header className="flex items-baseline justify-between border-b border-hairline px-6 pt-6 pb-5">
-        <h2 className="font-display text-3xl text-ink">{label}</h2>
+      <header className="flex items-baseline justify-between border-b border-hairline px-4 pt-5 pb-4 sm:px-6 sm:pt-6 sm:pb-5">
+        <h2 className="font-display text-2xl sm:text-3xl text-ink">{label}</h2>
         <span className="text-sm tabular-nums text-ink-faint">{items.length}</span>
       </header>
-      <div ref={setNodeRef} className="min-h-[64px] p-4">
+      <div ref={setNodeRef} className="min-h-[64px] p-2 sm:p-4">
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           {items.length === 0 ? (
             <p className="px-2 py-4 text-center text-sm text-ink-faint">{emptyLabel}</p>

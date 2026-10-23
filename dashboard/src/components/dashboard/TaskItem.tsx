@@ -92,6 +92,37 @@ function dueChipFor(days: number | null, completed: boolean) {
   return null;
 }
 
+function DueChipBadge({
+  chip,
+  large,
+  className,
+}: {
+  chip: NonNullable<ReturnType<typeof dueChipFor>>;
+  large: boolean;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide",
+        large && "px-2.5 text-xs",
+        chip.kind === "soon" && "border-[1.5px] border-ink py-px text-ink",
+        chip.kind === "today" && "bg-ink text-background",
+        chip.kind === "overdue" &&
+          "mr-0.5 animate-due-pulse bg-ink text-background outline-2 outline-offset-2 outline-ink",
+        className,
+      )}
+    >
+      {chip.kind === "overdue" ? (
+        <AlertTriangle className="h-2.5 w-2.5" />
+      ) : (
+        <Clock className="h-2.5 w-2.5" />
+      )}
+      {chip.text}
+    </span>
+  );
+}
+
 const TILE_STYLES = {
   far: "border-ink/40 bg-surface-elevated text-ink",
   soon: "border-2 border-ink bg-surface-elevated text-ink",
@@ -109,9 +140,9 @@ function DeadlineBadge({ type }: { type: DeadlineType }) {
       role="img"
       aria-label={label}
       title={label}
-      className="flex h-10 w-10 shrink-0 items-center justify-center text-ink"
+      className="flex h-7 w-7 shrink-0 items-center justify-center text-ink sm:h-10 sm:w-10"
     >
-      <Icon className="h-[34px] w-[34px]" />
+      <Icon className="h-6 w-6 sm:h-[34px] sm:w-[34px]" />
     </div>
   );
 }
@@ -131,7 +162,7 @@ function DeadlineTile({
     <div
       aria-label={`Deadline: ${big}`}
       className={cn(
-        "w-[62px] shrink-0 rounded-lg border-[1.5px] px-1 py-1.5 text-center",
+        "w-[50px] shrink-0 rounded-lg border-[1.5px] px-0.5 py-1.5 text-center sm:w-[62px] sm:px-1",
         TILE_STYLES[tier],
       )}
     >
@@ -335,7 +366,7 @@ export function TaskItem({
           {...listeners}
           className={cn(
             "group relative flex min-w-0 cursor-pointer items-center gap-2 rounded-md border border-transparent px-2 py-2 transition-colors hover:border-hairline hover:bg-surface-elevated active:cursor-grabbing",
-            large && "gap-2.5 px-2.5 py-2.5",
+            large && "gap-2 px-1.5 py-2 sm:gap-2.5 sm:px-2.5 sm:py-2.5",
             isDragging && "opacity-0",
             phase === "leaving" && "opacity-0 transition-opacity duration-200",
           )}
@@ -384,23 +415,9 @@ export function TaskItem({
                 {task.name}
               </p>
               {dueChip ? (
-                <span
-                  className={cn(
-                    "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide",
-                    large && "px-2.5 text-xs",
-                    dueChip.kind === "soon" && "border-[1.5px] border-ink py-px text-ink",
-                    dueChip.kind === "today" && "bg-ink text-background",
-                    dueChip.kind === "overdue" &&
-                      "mr-0.5 animate-due-pulse bg-ink text-background outline-2 outline-offset-2 outline-ink",
-                  )}
-                >
-                  {dueChip.kind === "overdue" ? (
-                    <AlertTriangle className="h-2.5 w-2.5" />
-                  ) : (
-                    <Clock className="h-2.5 w-2.5" />
-                  )}
-                  {dueChip.text}
-                </span>
+                // On phones the Priority view moves the chip under the name
+                // (below) so the name keeps its room.
+                <DueChipBadge chip={dueChip} large={large} className={large ? "hidden sm:inline-flex" : undefined} />
               ) : (
                 hatLabel && (
                   <span
@@ -414,6 +431,11 @@ export function TaskItem({
                 )
               )}
             </div>
+            {large && dueChip && (
+              <div className="mt-1 sm:hidden">
+                <DueChipBadge chip={dueChip} large />
+              </div>
+            )}
             {(project || dueLabel || (dueChip && hatLabel)) && (
               <div
                 className={cn(
@@ -455,7 +477,7 @@ export function TaskItem({
 
           {sectionIndex >= 0 && (
             <div
-              className="flex shrink-0 flex-col overflow-hidden rounded-md border border-hairline bg-surface-elevated opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+              className="hidden shrink-0 flex-col overflow-hidden rounded-md border border-hairline bg-surface-elevated sm:flex sm:opacity-0 sm:group-hover:opacity-100"
               onClick={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
             >
@@ -489,7 +511,9 @@ export function TaskItem({
             size="icon"
             className={cn(
               "h-6 w-6 shrink-0",
-              large && "h-7 w-7",
+              // On phones the Priority view keeps just the ⋯ button; star,
+              // pin and the move arrows live in its menu instead.
+              large && "hidden h-7 w-7 sm:inline-flex",
               task.starred
                 ? "text-amber-500 opacity-100"
                 : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100",
@@ -509,7 +533,7 @@ export function TaskItem({
             size="icon"
             className={cn(
               "h-6 w-6 shrink-0",
-              large && "h-7 w-7",
+              large && "hidden h-7 w-7 sm:inline-flex",
               task.pinned
                 ? "text-blue-500 opacity-100"
                 : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100",
@@ -540,6 +564,29 @@ export function TaskItem({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+              {large && (
+                <div className="sm:hidden">
+                  {moveUpTo && (
+                    <DropdownMenuItem onClick={() => moveToSection(moveUpTo)}>
+                      <ChevronUp className="mr-2 h-4 w-4" /> Move to {SECTION_LABELS[moveUpTo]}
+                    </DropdownMenuItem>
+                  )}
+                  {moveDownTo && (
+                    <DropdownMenuItem onClick={() => moveToSection(moveDownTo)}>
+                      <ChevronDown className="mr-2 h-4 w-4" /> Move to {SECTION_LABELS[moveDownTo]}
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={() => togglePin(task.id)}>
+                    <Pin className="mr-2 h-4 w-4" />
+                    {task.pinned ? "Unpin as current task" : "Pin as current task"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => toggleStar(task.id)}>
+                    <Star className="mr-2 h-4 w-4" />
+                    {task.starred ? "Remove from Priority view" : "Add to Priority view"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </div>
+              )}
               <DropdownMenuItem onClick={openAddSubtask}>
                 <ListPlus className="mr-2 h-4 w-4" /> Add subtask
               </DropdownMenuItem>

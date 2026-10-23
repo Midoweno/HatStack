@@ -135,7 +135,7 @@ function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="mx-auto max-w-[1600px] px-6 pt-10 pb-6 sm:px-10">
+      <header className="mx-auto max-w-[1600px] px-4 pt-8 pb-5 sm:px-10 sm:pt-10 sm:pb-6">
         <div className="flex flex-col gap-4 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-[0.18em] text-ink-faint">
@@ -192,7 +192,7 @@ function Dashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1600px] px-6 pb-16 sm:px-10">
+      <main className="mx-auto max-w-[1600px] px-3 pb-16 sm:px-10">
         {view === "hats" ? (
           <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
