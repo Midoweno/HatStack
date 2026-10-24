@@ -237,7 +237,7 @@ function MonthView({
                   isToday(day)
                     ? "rounded-full bg-ink px-1.5 py-0.5 font-semibold text-background"
                     : !inMonth
-                      ? "text-ink-faint/50"
+                      ? "text-ink-faint/60"
                       : "text-ink-soft",
                 )}
               >
@@ -285,7 +285,7 @@ function CalendarTaskChip({
         onClick={() => onEdit(task)}
         className="flex w-full items-center gap-1 truncate text-left text-[10px] text-ink-soft hover:text-ink"
       >
-        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", u.dot)} />
+        <span className={cn("h-2 w-2 shrink-0 rounded-full", u.dotSolid)} />
         <span className="truncate">{task.name}</span>
       </button>
     );

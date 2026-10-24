@@ -48,6 +48,7 @@
 }
 
 :root {
+  color-scheme: light;
   --radius: 0.75rem;
 
   /* Paper-like warm neutral palette */
@@ -101,15 +102,16 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.18 0.01 60);
   --foreground: oklch(0.95 0.005 80);
   --surface: oklch(0.2 0.012 60);
   --surface-elevated: oklch(0.24 0.014 60);
-  --hairline: oklch(0.32 0.012 60);
-  --hairline-strong: oklch(0.42 0.012 60);
+  --hairline: oklch(0.4 0.012 60);
+  --hairline-strong: oklch(0.52 0.012 60);
   --ink: oklch(0.95 0.005 80);
-  --ink-soft: oklch(0.78 0.01 70);
-  --ink-faint: oklch(0.6 0.01 70);
+  --ink-soft: oklch(0.82 0.01 70);
+  --ink-faint: oklch(0.7 0.01 70);
   --card: oklch(0.24 0.014 60);
   --card-foreground: oklch(0.95 0.005 80);
   --popover: oklch(0.24 0.014 60);

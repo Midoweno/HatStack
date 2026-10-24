@@ -28,11 +28,12 @@ export const URGENCY_ORDER: Record<Urgency, number> = {
 
 export const URGENCY_META: Record<
   Urgency,
-  { label: string; dot: string; ring: string; text: string; pillText: string }
+  { label: string; dot: string; dotSolid: string; ring: string; text: string; pillText: string }
 > = {
   critical: {
     label: "Critical",
     dot: "bg-urgency-critical",
+    dotSolid: "bg-urgency-critical",
     ring: "ring-urgency-critical/40",
     text: "text-urgency-critical",
     pillText: "text-black/80",
@@ -40,6 +41,7 @@ export const URGENCY_META: Record<
   high: {
     label: "High",
     dot: "bg-urgency-high/85",
+    dotSolid: "bg-urgency-high",
     ring: "ring-urgency-high/40",
     text: "text-urgency-high",
     pillText: "text-black/80",
@@ -47,6 +49,7 @@ export const URGENCY_META: Record<
   medium: {
     label: "Medium",
     dot: "bg-urgency-medium/70",
+    dotSolid: "bg-urgency-medium",
     ring: "ring-urgency-medium/40",
     text: "text-urgency-medium",
     pillText: "text-black/80",
@@ -54,6 +57,7 @@ export const URGENCY_META: Record<
   low: {
     label: "Low",
     dot: "bg-urgency-low/55",
+    dotSolid: "bg-urgency-low",
     ring: "ring-urgency-low/40",
     text: "text-urgency-low",
     pillText: "text-black/80",
