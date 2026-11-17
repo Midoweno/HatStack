@@ -342,7 +342,11 @@ function Dashboard() {
         goal={goalDialog.goal}
         defaultPassion={goalDialog.passion}
       />
-      <ArchiveSheet open={archiveOpen} onOpenChange={setArchiveOpen} />
+      <ArchiveSheet
+        open={archiveOpen}
+        onOpenChange={setArchiveOpen}
+        space={view === "chi" ? "chi" : "hats"}
+      />
       <ProjectTasksDialog
         project={openProject}
         onOpenChange={(v) => !v && setOpenProject(null)}

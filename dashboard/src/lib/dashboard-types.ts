@@ -67,6 +67,13 @@ export const URGENCY_META: Record<
   },
 };
 
+// One logged chunk of progress toward a goal's numeric target.
+export interface ProgressEntry {
+  id: string;
+  date: string; // yyyy-MM-dd
+  amount: number;
+}
+
 export interface Project {
   id: string;
   hat: Hat;
@@ -77,6 +84,10 @@ export interface Project {
   // CHI goals: the project is a goal, grouped under a passion (Music, ...).
   space?: Space;
   passion?: string;
+  // Optional numeric target (100 "emails") and what's been logged toward it.
+  target?: number;
+  unit?: string;
+  progress?: ProgressEntry[];
   completed: boolean;
   completedAt?: number;
   createdAt: number;

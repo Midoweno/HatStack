@@ -1,7 +1,12 @@
+import { useState } from "react";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { Check, Pencil, Plus } from "lucide-react";
+import { toast } from "sonner";
 import type { Project, Task } from "@/lib/dashboard-types";
+import { useDashboard } from "@/lib/dashboard-store";
+import { goalCurrent, isGoalAchieved } from "@/lib/chi-stats";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { TaskItem } from "@/components/dashboard/TaskItem";
 import { cn } from "@/lib/utils";
 import { Enso } from "./Enso";
@@ -33,11 +38,14 @@ function targetLabel(dueDate: string | undefined) {
 }
 
 export function ChiGoals({ tasks, projects, onNewTask, onEditTask, onNewGoal, onEditGoal }: Props) {
-  const goals = projects.filter((p) => p.space === "chi");
+  // Achieved goals live in the Achievements tab, not here.
+  const goals = projects.filter((p) => p.space === "chi" && !p.completed);
   const chiTasks = tasks.filter((t) => t.space === "chi" && !t.parentTaskId);
-  const goalIds = new Set(goals.map((g) => g.id));
+  // A task is only "loose" if it has no goal at all — tasks of an achieved goal
+  // stay tucked away with it.
+  const knownGoalIds = new Set(projects.filter((p) => p.space === "chi").map((p) => p.id));
   const looseOpen = chiTasks
-    .filter((t) => !t.completed && (!t.projectId || !goalIds.has(t.projectId)))
+    .filter((t) => !t.completed && (!t.projectId || !knownGoalIds.has(t.projectId)))
     .sort(byDueThenCreated);
 
   const byPassion = new Map<string, Project[]>();
@@ -143,17 +151,47 @@ function GoalCard({
   onEditTask: (task: Task) => void;
   onEditGoal: (goal: Project) => void;
 }) {
+  const logProgress = useDashboard((s) => s.logProgress);
+  const removeProgress = useDashboard((s) => s.removeProgress);
+  const completeProject = useDashboard((s) => s.completeProject);
+  const uncompleteProject = useDashboard((s) => s.uncompleteProject);
+  const [logging, setLogging] = useState(false);
+  const [amount, setAmount] = useState("");
+
   const done = tasks.filter((t) => t.completed).length;
   const total = tasks.length;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-  const finished = total > 0 && done === total;
+  const hasTarget = !!goal.target && goal.target > 0;
+  const current = goalCurrent(goal);
+  const pct = hasTarget
+    ? Math.min(100, Math.round((current / goal.target!) * 100))
+    : total > 0
+      ? Math.round((done / total) * 100)
+      : 0;
+  const achieved = isGoalAchieved(goal, tasks);
   const open = tasks.filter((t) => !t.completed).sort(byDueThenCreated);
+  const unit = goal.unit ? ` ${goal.unit}` : "";
+  const todayKey = format(new Date(), "yyyy-MM-dd");
+  const loggedToday = (goal.progress ?? [])
+    .filter((e) => e.date === todayKey)
+    .reduce((sum, e) => sum + e.amount, 0);
+
+  const submitLog = () => {
+    const n = Number(amount);
+    if (!(n > 0)) return;
+    const entryId = logProgress(goal.id, n);
+    toast(`Logged +${n}${unit} toward "${goal.name}"`, {
+      action: { label: "Undo", onClick: () => removeProgress(goal.id, entryId) },
+      duration: 4000,
+    });
+    setAmount("");
+    setLogging(false);
+  };
 
   return (
     <article
       className={cn(
         "group/goal rounded-2xl border bg-surface p-4 sm:p-5",
-        finished ? "border-chi/50 bg-chi-soft/50" : "border-hairline-strong",
+        achieved ? "border-chi/50 bg-chi-soft/50" : "border-hairline-strong",
       )}
     >
       <header className="flex items-start justify-between gap-3">
@@ -164,7 +202,7 @@ function GoalCard({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {finished && (
+          {achieved && (
             <span className="inline-flex items-center gap-1 rounded-full bg-chi px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
               <Check className="h-3 w-3" /> Done
             </span>
@@ -183,7 +221,7 @@ function GoalCard({
       <div className="mt-3 flex items-center justify-between text-xs text-ink-faint">
         <span>{targetLabel(goal.dueDate)}</span>
         <span className="tabular-nums">
-          {done} / {total}
+          {hasTarget ? `${current} / ${goal.target}${unit}` : `${done} / ${total}`}
         </span>
       </div>
       <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-hairline">
@@ -193,12 +231,92 @@ function GoalCard({
         />
       </div>
 
+      {achieved && (
+        <button
+          type="button"
+          onClick={() => completeProject(goal.id)}
+          className="mt-3 w-full rounded-lg bg-chi py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+        >
+          Move to Achievements
+        </button>
+      )}
+
+      {hasTarget && !achieved && (
+        <div className="mt-3">
+          {logging ? (
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={1}
+                autoFocus
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    submitLog();
+                  } else if (e.key === "Escape") {
+                    setLogging(false);
+                  }
+                }}
+                placeholder={goal.unit ? `How many ${goal.unit}?` : "How many?"}
+                className="h-8 w-40 text-sm"
+              />
+              <Button
+                size="sm"
+                className="bg-chi text-white hover:bg-chi/90"
+                onClick={submitLog}
+              >
+                Log
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setLogging(false)}>
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setLogging(true)}
+                className="inline-flex items-center gap-1 text-xs font-medium text-chi hover:underline"
+              >
+                <Plus className="h-3.5 w-3.5" /> Log progress
+              </button>
+              {loggedToday > 0 && (
+                <span className="text-[11px] text-ink-faint">
+                  Today +{loggedToday}
+                  {unit}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="mt-3 space-y-0.5">
         {open.map((t) => (
           <TaskItem key={t.id} task={t} onEdit={onEditTask} chi />
         ))}
       </div>
-      <AddTaskButton onClick={() => onNewTask(goal.id)} />
+      <div className="mt-1 flex items-center gap-1">
+        <AddTaskButton onClick={() => onNewTask(goal.id)} />
+        {!achieved && (
+          <button
+            type="button"
+            onClick={() => {
+              completeProject(goal.id);
+              toast(`"${goal.name}" completed`, {
+                description: "Moved to Achievements.",
+                action: { label: "Undo", onClick: () => uncompleteProject(goal.id) },
+                duration: 6000,
+              });
+            }}
+            className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs text-ink-faint transition-colors hover:bg-chi-soft hover:text-chi"
+          >
+            <Check className="h-3.5 w-3.5" /> Complete goal
+          </button>
+        )}
+      </div>
     </article>
   );
 }

@@ -31,6 +31,8 @@ export function GoalDialog({ open, onOpenChange, goal, defaultPassion }: Props) 
   const [passion, setPassion] = useState("");
   const [outcome, setOutcome] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [target, setTarget] = useState("");
+  const [unit, setUnit] = useState("");
 
   const passions = [
     ...new Set(
@@ -46,6 +48,8 @@ export function GoalDialog({ open, onOpenChange, goal, defaultPassion }: Props) 
       setPassion(goal?.passion ?? defaultPassion ?? "");
       setOutcome(goal?.description ?? "");
       setDueDate(goal?.dueDate ?? "");
+      setTarget(goal?.target ? String(goal.target) : "");
+      setUnit(goal?.unit ?? "");
     }
   }, [open, goal, defaultPassion]);
 
@@ -56,6 +60,8 @@ export function GoalDialog({ open, onOpenChange, goal, defaultPassion }: Props) 
       passion: passion.trim() || undefined,
       description: outcome.trim() || undefined,
       dueDate: dueDate || undefined,
+      target: Number(target) > 0 ? Number(target) : undefined,
+      unit: Number(target) > 0 ? unit.trim() || undefined : undefined,
     };
     if (goal) updateProject(goal.id, patch);
     else addProject({ ...patch, hat: "personal", space: "chi" });
@@ -120,6 +126,27 @@ export function GoalDialog({ open, onOpenChange, goal, defaultPassion }: Props) 
               placeholder="What does done look like?"
               rows={2}
             />
+          </div>
+          <div className="grid grid-cols-[110px_1fr] gap-3">
+            <div className="space-y-1.5">
+              <Label>Target (optional)</Label>
+              <Input
+                type="number"
+                min={1}
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+                placeholder="100"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>What are you counting?</Label>
+              <Input
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                placeholder="emails"
+                disabled={!(Number(target) > 0)}
+              />
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label>Target date (optional)</Label>

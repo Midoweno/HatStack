@@ -8,6 +8,7 @@ import type {
   DeadlineType,
   Hat,
   Project,
+  ProgressEntry,
   Recurrence,
   RecurrenceFreq,
   Space,
@@ -75,6 +76,9 @@ type ProjectRow = {
   description: string | null;
   space: Space;
   passion: string | null;
+  target: number | null;
+  unit: string | null;
+  progress: ProgressEntry[] | null;
   completed: boolean;
   completed_at: string | null;
   created_at: string;
@@ -115,6 +119,9 @@ function projectFromRow(row: ProjectRow): Project {
     description: row.description ?? undefined,
     space: row.space ?? "hats",
     passion: row.passion ?? undefined,
+    target: row.target ?? undefined,
+    unit: row.unit ?? undefined,
+    progress: row.progress ?? [],
     completed: row.completed,
     completedAt: row.completed_at ? new Date(row.completed_at).getTime() : undefined,
     createdAt: new Date(row.created_at).getTime(),
@@ -132,6 +139,9 @@ function projectToRow(userId: string, p: Project): ProjectRow {
     description: p.description ?? null,
     space: p.space ?? "hats",
     passion: p.passion ?? null,
+    target: p.target ?? null,
+    unit: p.unit ?? null,
+    progress: p.progress ?? [],
     completed: p.completed,
     completed_at: p.completedAt ? new Date(p.completedAt).toISOString() : null,
     created_at: new Date(p.createdAt).toISOString(),
@@ -146,6 +156,9 @@ function projectPatchToRow(patch: Partial<Omit<Project, "id">>) {
   if ("dueDate" in patch) row.due_date = patch.dueDate ?? null;
   if ("description" in patch) row.description = patch.description ?? null;
   if ("passion" in patch) row.passion = patch.passion ?? null;
+  if ("target" in patch) row.target = patch.target ?? null;
+  if ("unit" in patch) row.unit = patch.unit ?? null;
+  if ("progress" in patch) row.progress = patch.progress ?? [];
   if ("completed" in patch) row.completed = patch.completed;
   if ("completedAt" in patch)
     row.completed_at = patch.completedAt ? new Date(patch.completedAt).toISOString() : null;
@@ -276,6 +289,8 @@ interface Store extends DashboardState {
     description?: string;
     space?: Space;
     passion?: string;
+    target?: number;
+    unit?: string;
   }) => Project;
   updateProject: (id: string, patch: Partial<Omit<Project, "id">>) => void;
   completeProject: (id: string) => void;
@@ -284,6 +299,10 @@ interface Store extends DashboardState {
   // CHI goals: deletes the goal together with its tasks (a Hats project only
   // detaches its tasks, but CHI tasks without a goal would be orphaned).
   deleteGoal: (id: string) => void;
+  // Logs `amount` toward a goal's numeric target for today; returns the entry
+  // id so the caller can offer an undo.
+  logProgress: (goalId: string, amount: number) => string;
+  removeProgress: (goalId: string, entryId: string) => void;
 
   addTask: (input: {
     hat: Hat;
@@ -432,6 +451,9 @@ export const useDashboard = create<Store>()((set, get) => ({
       description: input.description,
       space: input.space,
       passion: input.passion,
+      target: input.target,
+      unit: input.unit,
+      progress: [],
       completed: false,
       createdAt: Date.now(),
     };
@@ -481,6 +503,22 @@ export const useDashboard = create<Store>()((set, get) => ({
       .delete()
       .eq("id", id)
       .then(({ error }) => error && reportError("delete project", error));
+  },
+  logProgress: (goalId, amount) => {
+    const entry: ProgressEntry = {
+      id: uid(),
+      date: format(new Date(), "yyyy-MM-dd"),
+      amount,
+    };
+    const goal = get().projects.find((p) => p.id === goalId);
+    get().updateProject(goalId, { progress: [...(goal?.progress ?? []), entry] });
+    return entry.id;
+  },
+  removeProgress: (goalId, entryId) => {
+    const goal = get().projects.find((p) => p.id === goalId);
+    get().updateProject(goalId, {
+      progress: (goal?.progress ?? []).filter((e) => e.id !== entryId),
+    });
   },
   deleteGoal: (id) => {
     const tasks = get().tasks;

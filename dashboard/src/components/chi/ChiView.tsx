@@ -1,5 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Award, BarChart3, Target } from "lucide-react";
+import { toast } from "sonner";
+import { useDashboard } from "@/lib/dashboard-store";
+import { isGoalAchieved } from "@/lib/chi-stats";
 import type { Project, Task } from "@/lib/dashboard-types";
 import { cn } from "@/lib/utils";
 import { Enso } from "./Enso";
@@ -26,6 +29,34 @@ interface Props {
 
 export function ChiView(props: Props) {
   const [tab, setTab] = useState<ChiTab>("goals");
+  const completeProject = useDashboard((s) => s.completeProject);
+  const uncompleteProject = useDashboard((s) => s.uncompleteProject);
+
+  // The moment a goal becomes achieved (last task ticked, or its number
+  // reached) it moves to Achievements. Only a change seen while you're here
+  // triggers it, so a goal you reopened isn't moved straight back.
+  const wasAchieved = useRef<Map<string, boolean> | null>(null);
+  useEffect(() => {
+    const chiTasks = props.tasks.filter((t) => t.space === "chi" && !t.parentTaskId);
+    const now = new Map<string, boolean>();
+    for (const goal of props.projects) {
+      if (goal.space !== "chi" || goal.completed) continue;
+      const achieved = isGoalAchieved(
+        goal,
+        chiTasks.filter((t) => t.projectId === goal.id),
+      );
+      now.set(goal.id, achieved);
+      if (wasAchieved.current?.get(goal.id) === false && achieved) {
+        completeProject(goal.id);
+        toast(`"${goal.name}" achieved`, {
+          description: "Moved to Achievements.",
+          action: { label: "Undo", onClick: () => uncompleteProject(goal.id) },
+          duration: 6000,
+        });
+      }
+    }
+    wasAchieved.current = now;
+  }, [props.tasks, props.projects, completeProject, uncompleteProject]);
 
   return (
     <div className="mx-auto max-w-3xl">
