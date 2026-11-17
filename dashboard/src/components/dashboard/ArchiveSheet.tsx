@@ -21,14 +21,15 @@ interface Props {
 export function ArchiveSheet({ open, onOpenChange }: Props) {
   const [tab, setTab] = useState<"tasks" | "completedProjects">("tasks");
 
-  const projects = useDashboard((s) => s.projects);
+  const allProjects = useDashboard((s) => s.projects);
+  const projects = allProjects.filter((p) => p.space !== "chi");
   const uncompleteProject = useDashboard((s) => s.uncompleteProject);
   const deleteProject = useDashboard((s) => s.deleteProject);
   const completedProjects = projects
     .filter((p) => p.completed)
     .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0));
 
-  const tasks = useDashboard((s) => s.tasks);
+  const tasks = useDashboard((s) => s.tasks).filter((t) => t.space !== "chi");
   const projectById = new Map(projects.map((p) => [p.id, p]));
   const toggleTask = useDashboard((s) => s.toggleTask);
   const deleteTask = useDashboard((s) => s.deleteTask);

@@ -39,6 +39,8 @@
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);
   --color-ink-faint: var(--ink-faint);
+  --color-chi: var(--chi);
+  --color-chi-soft: var(--chi-soft);
   --color-urgency-critical: var(--urgency-critical);
   --color-urgency-high: var(--urgency-high);
   --color-urgency-medium: var(--urgency-medium);
@@ -61,6 +63,10 @@
   --ink: oklch(0.22 0.02 55);
   --ink-soft: oklch(0.42 0.015 60);
   --ink-faint: oklch(0.62 0.012 70);
+
+  /* CHI (passion) space: one vermilion accent */
+  --chi: oklch(0.6 0.19 35);
+  --chi-soft: oklch(0.95 0.035 45);
 
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.22 0.02 55);
@@ -112,6 +118,8 @@
   --ink: oklch(0.95 0.005 80);
   --ink-soft: oklch(0.82 0.01 70);
   --ink-faint: oklch(0.7 0.01 70);
+  --chi: oklch(0.72 0.17 40);
+  --chi-soft: oklch(0.3 0.06 40);
   --card: oklch(0.24 0.014 60);
   --card-foreground: oklch(0.95 0.005 80);
   --popover: oklch(0.24 0.014 60);

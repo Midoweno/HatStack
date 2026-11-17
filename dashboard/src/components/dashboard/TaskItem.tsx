@@ -49,6 +49,8 @@ interface Props {
   // Which Priority-view section this row sits in; when set, the row shows
   // up/down arrows to move it to the neighbouring section.
   sectionBucket?: StarBucket;
+  // A CHI task: no star/pin (those feed the Hats Priority view) and no hat label.
+  chi?: boolean;
 }
 
 const SECTION_ORDER: StarBucket[] = ["today", "priority", "future"];
@@ -184,6 +186,7 @@ export function TaskItem({
   keepOnComplete = false,
   large = false,
   sectionBucket,
+  chi = false,
 }: Props) {
   const toggleTask = useDashboard((s) => s.toggleTask);
   const updateTask = useDashboard((s) => s.updateTask);
@@ -285,7 +288,7 @@ export function TaskItem({
   // The icon needs a Type; the countdown tile only needs a date to count to.
   const showDeadlineIcon = large && !task.completed && !!task.deadlineType;
   const showDeadlineTile = large && !task.completed && deadlineTier !== null;
-  const hatLabel = HATS.find((h) => h.id === task.hat)?.label;
+  const hatLabel = chi ? undefined : HATS.find((h) => h.id === task.hat)?.label;
 
   // Up/down arrows between the Today / Priority / Future sections (Default
   // sort only — the caller passes sectionBucket only there). A moved task
@@ -345,6 +348,7 @@ export function TaskItem({
         name,
         dueDate: subtaskDueDate || undefined,
         parentTaskId: task.id,
+        space: task.space,
       });
     }
     setSubtaskName("");
@@ -517,6 +521,7 @@ export function TaskItem({
               task.starred
                 ? "text-amber-500 opacity-100"
                 : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100",
+              chi && "hidden",
             )}
             onClick={(e) => {
               e.stopPropagation();
@@ -537,6 +542,7 @@ export function TaskItem({
               task.pinned
                 ? "text-blue-500 opacity-100"
                 : "opacity-100 sm:opacity-0 sm:group-hover:opacity-100",
+              chi && "hidden",
             )}
             onClick={(e) => {
               e.stopPropagation();

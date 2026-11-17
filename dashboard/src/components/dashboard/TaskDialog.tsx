@@ -6,6 +6,7 @@ import type {
   DeadlineType,
   Hat,
   RecurrenceFreq,
+  Space,
   StarBucket,
   Task,
   Urgency,
@@ -39,6 +40,8 @@ interface Props {
   defaultHat?: Hat;
   defaultProjectId?: string;
   task?: Task | null;
+  // "chi" makes this a CHI task: goals instead of hats/projects, no starring.
+  space?: Space;
 }
 
 const NONE = "__none__";
@@ -241,7 +244,9 @@ export function TaskDialog({
   defaultHat,
   defaultProjectId,
   task,
+  space,
 }: Props) {
+  const isChi = space === "chi";
   const addTask = useDashboard((s) => s.addTask);
   const updateTask = useDashboard((s) => s.updateTask);
   const deleteTask = useDashboard((s) => s.deleteTask);
@@ -280,7 +285,7 @@ export function TaskDialog({
       setDailyUntilDue(isDailyUntil);
       setDueDate(isDailyUntil ? (rec?.until ?? "") : (task?.dueDate ?? ""));
       setDescription(task?.description ?? "");
-      setStarred(task ? (task.starred ?? false) : true);
+      setStarred(task ? (task.starred ?? false) : !isChi);
       setStarBucket(task?.starBucket ?? "future");
       setProjectId(task?.projectId ?? defaultProjectId ?? NONE);
       setRepeat(isDailyUntil ? "none" : (rec?.freq ?? "none"));
@@ -288,11 +293,14 @@ export function TaskDialog({
       setRecurrenceEnd(isDailyUntil ? "" : (rec?.until ?? ""));
       setDraftSubtasks([]);
     }
-  }, [open, task, defaultHat, defaultProjectId]);
+  }, [open, task, defaultHat, defaultProjectId, isChi]);
 
   const availableProjects = useMemo(
-    () => projects.filter((p) => !p.completed && p.hat === hat),
-    [projects, hat],
+    () =>
+      projects.filter((p) =>
+        isChi ? p.space === "chi" && !p.completed : !p.completed && p.space !== "chi" && p.hat === hat,
+      ),
+    [projects, hat, isChi],
   );
 
   const existingSubtasks = useMemo(
@@ -342,7 +350,8 @@ export function TaskDialog({
 
     const payload = {
       name: name.trim(),
-      hat,
+      hat: isChi ? ("personal" as const) : hat,
+      ...(isChi ? { space: "chi" as const } : {}),
       urgency,
       deadlineType,
       dueDate: taskDue,
@@ -357,7 +366,7 @@ export function TaskDialog({
               interval: Math.max(1, recurrenceInterval || 1),
               until: recurrenceEnd || undefined,
             },
-      starred,
+      starred: isChi ? false : starred,
     };
     let parentId: string;
     if (task) {
@@ -378,7 +387,8 @@ export function TaskDialog({
       const draftName = draft.name.trim();
       if (!draftName) continue;
       addTask({
-        hat,
+        hat: isChi ? "personal" : hat,
+        space: isChi ? "chi" : undefined,
         urgency,
         name: draftName,
         dueDate: draft.dueDate || undefined,
@@ -442,6 +452,7 @@ export function TaskDialog({
                 autoFocus
                 className="flex-1"
               />
+              {!isChi && (
               <Button
                 type="button"
                 variant="outline"
@@ -452,8 +463,9 @@ export function TaskDialog({
               >
                 <Star className={cn("h-4 w-4", starred && "fill-current")} />
               </Button>
+              )}
             </div>
-            {starred && (
+            {!isChi && starred && (
               <div className="mt-2 inline-flex rounded-full border border-hairline bg-surface p-0.5">
                 {(["today", "priority", "future"] as const).map((b) => (
                   <button
@@ -474,7 +486,8 @@ export function TaskDialog({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className={cn("grid gap-3", isChi ? "grid-cols-1" : "grid-cols-2")}>
+            {!isChi && (
             <div className="space-y-1.5">
               <Label>Hat</Label>
               <HoverSelect
@@ -483,12 +496,13 @@ export function TaskDialog({
                 onSelect={setHat}
               />
             </div>
+            )}
             <div className="space-y-1.5">
-              <Label>Project</Label>
+              <Label>{isChi ? "Goal" : "Project"}</Label>
               <HoverSelect
                 value={projectId}
                 options={[
-                  { value: NONE, label: "Standalone" },
+                  { value: NONE, label: isChi ? "No goal yet" : "Standalone" },
                   ...availableProjects.map((p) => ({
                     value: p.id,
                     label: p.icon ? `${p.icon} ${p.name}` : p.name,

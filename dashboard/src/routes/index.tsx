@@ -11,7 +11,7 @@ import {
 } from "@dnd-kit/core";
 import { Archive, LogOut, Plus } from "lucide-react";
 import { format } from "date-fns";
-import { HATS, URGENCY_META, type Hat, type Project, type Task } from "@/lib/dashboard-types";
+import { HATS, URGENCY_META, type Hat, type Project, type Space, type Task } from "@/lib/dashboard-types";
 import { useDashboard } from "@/lib/dashboard-store";
 import { useAuth } from "@/lib/use-auth";
 import { supabase } from "@/lib/supabase";
@@ -21,20 +21,19 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { HatColumn } from "@/components/dashboard/HatColumn";
 import { PriorityList } from "@/components/dashboard/PriorityList";
-import { FitView } from "@/components/dashboard/FitView";
-import { CalendarView } from "@/components/dashboard/CalendarView";
 import { ProjectDialog } from "@/components/dashboard/ProjectDialog";
 import { TaskDialog } from "@/components/dashboard/TaskDialog";
 import { ArchiveSheet } from "@/components/dashboard/ArchiveSheet";
 import { ProjectTasksDialog } from "@/components/dashboard/ProjectTasksDialog";
+import { ChiView } from "@/components/chi/ChiView";
+import { GoalDialog } from "@/components/chi/GoalDialog";
 
-type ViewMode = "hats" | "priority" | "fit" | "calendar";
+type ViewMode = "hats" | "priority" | "chi";
 
 const VIEWS: { id: ViewMode; label: string }[] = [
   { id: "hats", label: "Hats" },
   { id: "priority", label: "Priority" },
-  { id: "fit", label: "FIT" },
-  { id: "calendar", label: "Calendar" },
+  { id: "chi", label: "CHI" },
 ];
 
 export const Route = createFileRoute("/")({
@@ -44,6 +43,7 @@ export const Route = createFileRoute("/")({
 function IndexRoute() {
   const { session, loading, event } = useAuth();
   const loadingData = useDashboard((s) => s.loading);
+  const loadError = useDashboard((s) => s.loadError);
   const init = useDashboard((s) => s.init);
   const reset = useDashboard((s) => s.reset);
 
@@ -60,16 +60,56 @@ function IndexRoute() {
     }
   }, [session?.user.id, event, init, reset]);
 
+  // If the first load failed, try again on its own as soon as the connection
+  // is back or the tab is revisited, rather than waiting for a manual reload.
+  useEffect(() => {
+    const userId = session?.user.id;
+    if (!loadError || !userId) return;
+    const retry = () => init(userId);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") retry();
+    };
+    window.addEventListener("online", retry);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("online", retry);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [loadError, session?.user.id, init]);
+
   if (loading) return null;
   if (!session) return <LoginScreen />;
   if (loadingData) return null;
+  if (loadError) {
+    return <LoadErrorScreen message={loadError} onRetry={() => init(session.user.id)} />;
+  }
 
   return <Dashboard />;
 }
 
+function LoadErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="w-full max-w-sm text-center">
+        <h1 className="font-display text-3xl text-ink">Couldn't load your tasks</h1>
+        <p className="mt-2 text-sm text-ink-soft">
+          Your tasks are safe — we just couldn't reach them. A retry usually fixes it.
+        </p>
+        <p className="mt-3 break-words text-xs text-ink-faint">{message}</p>
+        <Button className="mt-6 w-full" onClick={onRetry}>
+          Try again
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function Dashboard() {
-  const projects = useDashboard((s) => s.projects);
-  const tasks = useDashboard((s) => s.tasks);
+  const allProjects = useDashboard((s) => s.projects);
+  const allTasks = useDashboard((s) => s.tasks);
+  // Hats and Priority only ever see Hats data; CHI has its own space.
+  const projects = useMemo(() => allProjects.filter((p) => p.space !== "chi"), [allProjects]);
+  const tasks = useMemo(() => allTasks.filter((t) => t.space !== "chi"), [allTasks]);
   const moveTaskToHat = useDashboard((s) => s.moveTaskToHat);
 
   const [projectDialog, setProjectDialog] = useState<{
@@ -82,6 +122,12 @@ function Dashboard() {
     hat?: Hat;
     task?: Task | null;
     defaultProjectId?: string;
+    space?: Space;
+  }>({ open: false });
+  const [goalDialog, setGoalDialog] = useState<{
+    open: boolean;
+    goal?: Project | null;
+    passion?: string;
   }>({ open: false });
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [openProject, setOpenProject] = useState<Project | null>(null);
@@ -92,7 +138,8 @@ function Dashboard() {
   // the user is typing somewhere (including navigating a date input's
   // segments with the arrow keys) or another dialog is already up.
   useEffect(() => {
-    const dialogsOpen = projectDialog.open || taskDialog.open || archiveOpen || !!openProject;
+    const dialogsOpen =
+      projectDialog.open || taskDialog.open || goalDialog.open || archiveOpen || !!openProject;
     if (dialogsOpen) return;
     const handler = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -102,7 +149,7 @@ function Dashboard() {
       }
       if (e.key.toLowerCase() === "n") {
         e.preventDefault();
-        setTaskDialog({ open: true });
+        setTaskDialog({ open: true, space: view === "chi" ? "chi" : undefined });
       } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
         e.preventDefault();
         const idx = VIEWS.findIndex((v) => v.id === view);
@@ -112,7 +159,7 @@ function Dashboard() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [projectDialog.open, taskDialog.open, archiveOpen, openProject, view]);
+  }, [projectDialog.open, taskDialog.open, goalDialog.open, archiveOpen, openProject, view]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
@@ -152,7 +199,9 @@ function Dashboard() {
                   className={cn(
                     "rounded-full px-3 py-1 text-xs font-medium transition-colors",
                     view === v.id
-                      ? "bg-ink text-background"
+                      ? v.id === "chi"
+                        ? "bg-chi text-white"
+                        : "bg-ink text-background"
                       : "text-ink-faint hover:text-ink-soft",
                   )}
                 >
@@ -174,7 +223,7 @@ function Dashboard() {
             </Button>
             <Button
               size="sm"
-              onClick={() => setTaskDialog({ open: true })}
+              onClick={() => setTaskDialog({ open: true, space: view === "chi" ? "chi" : undefined })}
             >
               <Plus className="mr-1 h-4 w-4" />
               New task
@@ -233,38 +282,40 @@ function Dashboard() {
               )}
             </DragOverlay>
           </DndContext>
-        ) : view === "priority" ? (
+        ) : view === "chi" ? (
+          <ChiView
+            tasks={allTasks}
+            projects={allProjects}
+            onNewTask={(goalId) =>
+              setTaskDialog({ open: true, space: "chi", task: null, defaultProjectId: goalId })
+            }
+            onEditTask={(t) => setTaskDialog({ open: true, space: "chi", task: t })}
+            onNewGoal={(passion) => setGoalDialog({ open: true, goal: null, passion })}
+            onEditGoal={(g) => setGoalDialog({ open: true, goal: g })}
+          />
+        ) : (
           <PriorityList
             tasks={tasks}
             projects={projects}
             onEditTask={(t) => setTaskDialog({ open: true, hat: t.hat, task: t })}
           />
-        ) : view === "fit" ? (
-          <FitView />
-        ) : (
-          <CalendarView
-            tasks={tasks}
-            onEditTask={(t) => setTaskDialog({ open: true, hat: t.hat, task: t })}
-          />
         )}
 
-        {view !== "fit" && (
-          <footer className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-ink-faint">
-            <span className="uppercase tracking-[0.14em]">Urgency</span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-urgency-critical" /> Critical
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-urgency-high" /> High
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-urgency-medium" /> Medium
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-urgency-low" /> Low
-            </span>
-          </footer>
-        )}
+        <footer className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-ink-faint">
+          <span className="uppercase tracking-[0.14em]">Urgency</span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-urgency-critical" /> Critical
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-urgency-high" /> High
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-urgency-medium" /> Medium
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-urgency-low" /> Low
+          </span>
+        </footer>
       </main>
 
       <ProjectDialog
@@ -283,6 +334,13 @@ function Dashboard() {
         defaultHat={taskDialog.hat}
         defaultProjectId={taskDialog.defaultProjectId}
         task={taskDialog.task}
+        space={taskDialog.space}
+      />
+      <GoalDialog
+        open={goalDialog.open}
+        onOpenChange={(v) => setGoalDialog((s) => ({ ...s, open: v, goal: v ? s.goal : null }))}
+        goal={goalDialog.goal}
+        defaultPassion={goalDialog.passion}
       />
       <ArchiveSheet open={archiveOpen} onOpenChange={setArchiveOpen} />
       <ProjectTasksDialog
