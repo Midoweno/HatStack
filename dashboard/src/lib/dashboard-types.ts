@@ -88,6 +88,8 @@ export interface Project {
   target?: number;
   unit?: string;
   progress?: ProgressEntry[];
+  // Manual drag order among a passion's goals (lower first).
+  sortOrder?: number;
   completed: boolean;
   completedAt?: number;
   createdAt: number;
@@ -133,6 +135,8 @@ export interface Task {
   // otherwise its own due date.
   deadlineType?: DeadlineType;
   space?: Space;
+  // Manual drag order within a CHI goal (lower first).
+  sortOrder?: number;
 }
 
 export interface DashboardState {

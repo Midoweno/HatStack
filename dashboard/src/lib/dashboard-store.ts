@@ -79,6 +79,7 @@ type ProjectRow = {
   target: number | null;
   unit: string | null;
   progress: ProgressEntry[] | null;
+  sort_order: number | null;
   completed: boolean;
   completed_at: string | null;
   created_at: string;
@@ -107,6 +108,7 @@ type TaskRow = {
   pinned: boolean;
   deadline_type: DeadlineType | null;
   space: Space;
+  sort_order: number | null;
 };
 
 function projectFromRow(row: ProjectRow): Project {
@@ -122,6 +124,7 @@ function projectFromRow(row: ProjectRow): Project {
     target: row.target ?? undefined,
     unit: row.unit ?? undefined,
     progress: row.progress ?? [],
+    sortOrder: row.sort_order ?? undefined,
     completed: row.completed,
     completedAt: row.completed_at ? new Date(row.completed_at).getTime() : undefined,
     createdAt: new Date(row.created_at).getTime(),
@@ -142,6 +145,7 @@ function projectToRow(userId: string, p: Project): ProjectRow {
     target: p.target ?? null,
     unit: p.unit ?? null,
     progress: p.progress ?? [],
+    sort_order: p.sortOrder ?? null,
     completed: p.completed,
     completed_at: p.completedAt ? new Date(p.completedAt).toISOString() : null,
     created_at: new Date(p.createdAt).toISOString(),
@@ -159,6 +163,7 @@ function projectPatchToRow(patch: Partial<Omit<Project, "id">>) {
   if ("target" in patch) row.target = patch.target ?? null;
   if ("unit" in patch) row.unit = patch.unit ?? null;
   if ("progress" in patch) row.progress = patch.progress ?? [];
+  if ("sortOrder" in patch) row.sort_order = patch.sortOrder ?? null;
   if ("completed" in patch) row.completed = patch.completed;
   if ("completedAt" in patch)
     row.completed_at = patch.completedAt ? new Date(patch.completedAt).toISOString() : null;
@@ -192,6 +197,7 @@ function taskFromRow(row: TaskRow): Task {
     pinned: row.pinned,
     deadlineType: row.deadline_type ?? undefined,
     space: row.space ?? "hats",
+    sortOrder: row.sort_order ?? undefined,
   };
 }
 
@@ -219,6 +225,7 @@ function taskToRow(userId: string, t: Task): TaskRow {
     pinned: t.pinned ?? false,
     deadline_type: t.deadlineType ?? null,
     space: t.space ?? "hats",
+    sort_order: t.sortOrder ?? null,
   };
 }
 
@@ -246,6 +253,7 @@ function taskPatchToRow(patch: Partial<Omit<Task, "id">>) {
   if ("starBucket" in patch) row.star_bucket = patch.starBucket ?? null;
   if ("pinned" in patch) row.pinned = patch.pinned ?? false;
   if ("deadlineType" in patch) row.deadline_type = patch.deadlineType ?? null;
+  if ("sortOrder" in patch) row.sort_order = patch.sortOrder ?? null;
   return row;
 }
 
@@ -303,6 +311,11 @@ interface Store extends DashboardState {
   // id so the caller can offer an undo.
   logProgress: (goalId: string, amount: number) => string;
   removeProgress: (goalId: string, entryId: string) => void;
+  // After a drag in CHI: puts these tasks (in order) under a goal — or none
+  // (null) for loose tasks — and saves their order.
+  reorderTasks: (goalId: string | null, orderedIds: string[]) => void;
+  // Same for goals: puts them (in order) under a passion and saves the order.
+  reorderGoals: (passion: string | undefined, orderedIds: string[]) => void;
 
   addTask: (input: {
     hat: Hat;
@@ -518,6 +531,38 @@ export const useDashboard = create<Store>()((set, get) => ({
     const goal = get().projects.find((p) => p.id === goalId);
     get().updateProject(goalId, {
       progress: (goal?.progress ?? []).filter((e) => e.id !== entryId),
+    });
+  },
+  reorderTasks: (goalId, orderedIds) => {
+    const order = new Map(orderedIds.map((id, i) => [id, i]));
+    set((s) => ({
+      tasks: s.tasks.map((t) =>
+        order.has(t.id)
+          ? { ...t, projectId: goalId ?? undefined, sortOrder: order.get(t.id)! }
+          : t,
+      ),
+    }));
+    orderedIds.forEach((id, i) => {
+      supabase
+        .from("tasks")
+        .update({ project_id: goalId, sort_order: i })
+        .eq("id", id)
+        .then(({ error }) => error && reportError("reorder tasks", error));
+    });
+  },
+  reorderGoals: (passion, orderedIds) => {
+    const order = new Map(orderedIds.map((id, i) => [id, i]));
+    set((s) => ({
+      projects: s.projects.map((p) =>
+        order.has(p.id) ? { ...p, passion, sortOrder: order.get(p.id)! } : p,
+      ),
+    }));
+    orderedIds.forEach((id, i) => {
+      supabase
+        .from("projects")
+        .update({ passion: passion ?? null, sort_order: i })
+        .eq("id", id)
+        .then(({ error }) => error && reportError("reorder goals", error));
     });
   },
   deleteGoal: (id) => {
